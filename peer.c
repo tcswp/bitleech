@@ -31,7 +31,7 @@ int min(struct state *state)
 
 	min = -1;
 	for (i = 0; i < mi->num_pieces; i++)
-		if (state->piece_freq[i] && !get_bit(state->have, i) && !get_bit(state->pending_reqs, state->peer[i].curr_index))
+		if (state->piece_freq[i] && !get_bit(state->have, i) && !get_bit(state->pending_reqs, i))
 		{
 			min = i;	
 			break;
@@ -39,7 +39,7 @@ int min(struct state *state)
 
 	if (min != -1)
 		for (i = min+1; i < mi->num_pieces; i++)
-			if ((state->piece_freq[i] < state->piece_freq[min]) && !get_bit(state->have, i) && !get_bit(state->pending_reqs, state->peer[i].curr_index))
+			if ((state->piece_freq[i] < state->piece_freq[min]) && !get_bit(state->have, i) && !get_bit(state->pending_reqs, i))
 				min = i;
 
  	return min;
