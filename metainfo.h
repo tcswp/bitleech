@@ -3,6 +3,7 @@
 #define MAX_PIECES	0x10000
 #define MAX_MSG		5000
 #define MAX_PEERS	60
+#define QUEUE_LEN	10
 
 typedef enum {false, true} bool;
 
@@ -37,6 +38,9 @@ struct peer
 	int					sock;
 	bool				sent_hs;
 	time_t				send_time;
+	int					requestq[QUEUE_LEN];
+	int					qlen;
+	int					downloaded;
 	
 	unsigned char  		*bitfield;
 	bool				recvd_choke;
@@ -46,8 +50,9 @@ struct peer
 	
 	int			piece_offset;
 	unsigned char *curr_piece;
-	int			curr_index;
 	int			block_len;
+	
+	char peer_id[20];
 };
 
 struct state
@@ -62,7 +67,6 @@ struct state
   struct peer 	peer[MAX_PEERS];
   int			peer_num;
   
-  int			qd_requests;
   unsigned char *pending_reqs;
   
   int			interval;

@@ -8,16 +8,13 @@
 #include <time.h>
 #include <signal.h>
 #include <math.h>
-
 #include <netinet/in.h>	// socket stuff
 #include <sys/socket.h> // more socket stuff
 #include <sys/types.h>
 #include <sys/stat.h> // check if dir exists
 #include <netdb.h>
-
 #include <openssl/sha.h>
 #include <pthread.h>
-
 #include <fcntl.h>			// O_NONBLOCK
 #include <poll.h>
 
@@ -26,3 +23,9 @@
 #include "bdecode.h"
 #include "tracker.h"
 #include "peer.h"
+
+#ifdef DEBUG
+#define LOG(msg, ...)	fprintf(stderr, "%s:%d: " msg "\n", __FILE__, __LINE__, ##__VA_ARGS__);
+#else
+#define LOG(msg, ...)
+#endif

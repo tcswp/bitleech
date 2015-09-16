@@ -2,12 +2,6 @@
 
 extern struct metainfo *mi;
 
-void err(char *msg)
-{
-	perror(msg);
-	exit(1);
-}
-
 void encode_url(char* enc_str, char *str, int len)
 {
 	int i;

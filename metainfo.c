@@ -27,10 +27,4 @@ void fill_struct(struct state *state, const char *key, void *value, int len)
 	else if (STR_IS("peers"))			 decode_peers(state, (unsigned char*)value, len);
 }
 
-int check_hash(unsigned char *piece, int index)
-{
-// 	unsigned char *hash, rhash[20];
-// 	hash = SHA1(piece,20,NULL);
-// 	ntohb(rhash,hash,20);
-	return !memcmp(SHA1(piece,mi->piece_length,NULL),mi->pieces+20*index,20);
-}
+int check_hash(unsigned char *piece, int index){ return !memcmp(SHA1(piece,mi->piece_length,NULL),mi->pieces+20*index,20); }

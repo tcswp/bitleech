@@ -1,6 +1,5 @@
 #define PSTR				"BitTorrent protocol"
 #define BLOCK_LEN			0x4000
-#define QUEUE_LEN			10
 
 typedef enum
 {
@@ -11,10 +10,10 @@ typedef enum
 struct handshake
 {
 	unsigned char pstrlen;
-	unsigned char pstr[sizeof(PSTR)];
+	char pstr[sizeof(PSTR)];
 	unsigned long reserved;
 	unsigned char info_hash[20];
-	unsigned char peer_id[20];
+	char peer_id[20];
 };
 
 struct msg_request

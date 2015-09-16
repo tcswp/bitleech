@@ -2,22 +2,6 @@
 
 extern struct metainfo *mi;
 
-// request pipeline
-/*void enqueue(int p, unsigned char *request)
-{
-	struct request_item *item = malloc(sizeof (*item));
-	
-	if (md->peer[p]->front == NULL)
-		md->peer[p]->front = item;
-	else
-		md->peer[p]->back->next = item;
-	
-	md->peer[p]->back = item;
-	memcpy(md->peer[p]->back->data, request, );	
-	
-	md->peer[p].qd_requests++;
-}*/
-
 // returns 4-byte size of message
 static inline unsigned int get_msg_size(char *msg){return ntohl(*(long *)msg)+4;}
 
@@ -39,7 +23,7 @@ int min(struct state *state)
 
 	if (min != -1)
 		for (i = min+1; i < mi->num_pieces; i++)
-			if ((state->piece_freq[i] < state->piece_freq[min]) && !get_bit(state->have, i) && !get_bit(state->pending_reqs, i))
+			if (state->piece_freq[i] && (state->piece_freq[i] < state->piece_freq[min]) && !get_bit(state->have, i) && !get_bit(state->pending_reqs, i))
 				min = i;
 
  	return min;
@@ -53,8 +37,11 @@ int parse_msgs(struct state *state, int i)
 	int p, j;
 	
 	struct msg msg;
+	struct handshake hs;
 
 	unsigned char *id;
+	
+	static int got, num_connected;
 	
 	if ((recv_size = recv(state->peer[i].sock,state->peer[i].recv_buffer+state->peer[i].recv_len,MAX_MSG,0)) < 1)
 		return -1; // error receiving
@@ -63,16 +50,46 @@ int parse_msgs(struct state *state, int i)
 		
 	if (!state->peer[i].connected && state->peer[i].recv_len >= sizeof(struct handshake))
 	{
-		if (!strcmp(state->peer[i].recv_buffer+1,PSTR)) // full handshake sent
+		memcpy(&hs, state->peer[i].recv_buffer, sizeof (struct handshake));
+		for (j = 0; j < state->peer_num; j++)
+			if (state->peer[j].connected && i != j && !strcmp(hs.peer_id,state->peer[j].peer_id))
+			{
+				LOG("peer %d has same peer id as peer %d", j, i);
+				close(state->peer[i].sock);
+				return -1;
+			}
+		if (strcmp(hs.peer_id, PEER_ID) && hs.pstrlen == sizeof (PSTR)-1
+			&& !strcmp(hs.pstr, PSTR) && !memcmp(mi->info_hash, hs.info_hash, 20))
 		{
-			printf("received handshake\n");
+			//printf("received handshake\n");
+			num_connected++;
+			printf("connected to %d peers\n", num_connected);
 			state->peer[i].connected = true;
 			state->peer[i].bitfield = calloc(ceil(((float)mi->num_pieces)/8), sizeof(char));
+			memcpy(state->peer[i].peer_id, hs.peer_id, 20);
 			recv_size -= sizeof(struct handshake);
 			state->peer[i].recv_len -= sizeof(struct handshake);
 			memmove(state->peer[i].recv_buffer,state->peer[i].recv_buffer+sizeof(struct handshake),recv_size);
+			
+			state->peer[i].recvd_choke	= true;
+			state->peer[i].sent_choke	= false;
+			state->peer[i].recvd_interested = false;
+			state->peer[i].sent_interested = false;
+			state->peer[i].sent_interested = false;
+			state->peer[i].piece_offset = 0;
+			state->peer[i].block_len = BLOCK_LEN;
+			state->peer[i].send_time = 0;
+			state->peer[i].curr_piece	= calloc(mi->piece_length, sizeof (unsigned char));
+			state->peer[i].qlen = 0;
+			state->peer[i].requestq[qlen] = -1;
+			state->peer[i].downloaded = 0;
 		}
-		else return -1;
+		else
+		{
+			LOG("one of the handshake fields is not right");
+			close(state->peer[i].sock);
+			return -1;
+		}
 	}
 	
 	msg_offset = 0;
@@ -84,7 +101,16 @@ int parse_msgs(struct state *state, int i)
 			break;
 		
 		if (msg_size == 4)
+		{
 			printf("keep-alive\n");
+			for (j=0;j<mi->num_pieces;j++)
+			{
+				if (!get_bit(state->have, j))
+					printf("need piece %d\n", j);
+				if (get_bit(state->pending_reqs, j))
+					printf("but piece %d is in the pending rquests\n", j);
+			}
+		}
 		else
 		{
 			id = (unsigned char *) state->peer[i].recv_buffer+msg_offset+4;
@@ -92,11 +118,11 @@ int parse_msgs(struct state *state, int i)
 			switch (*id)
 			{
 				case 0: 
-					printf("choke\n");
+					//printf("choke\n");
 					state->peer[i].recvd_choke = true;
 					break;
 				case 1: 
-					printf("unchoke\n");
+					//printf("unchoke\n");
 					state->peer[i].recvd_choke = false;
 					break;
 				case 2: printf("interested\n"); break;
@@ -109,7 +135,7 @@ int parse_msgs(struct state *state, int i)
 					state->piece_freq[index]++;
 					break;
 				case 5:
-					printf("bitfield\n");
+					//printf("bitfield\n");
 					memcpy(state->peer[i].bitfield,id+1,ceil(((float)mi->num_pieces)/8));
 					
 					for (j = 0; j < mi->num_pieces; j++)
@@ -118,13 +144,12 @@ int parse_msgs(struct state *state, int i)
 					break;    
 				case 6: printf("request\n"); break;
 				case 7:
-					printf("piece\n");
+					//printf("piece\n");
 					length = ntohl(*(long *)(id-4))-9;
 					index = ntohl(*(long *)(id+1));
 					begin = ntohl(*(long *)(id+5));
-					if (index != state->peer[i].curr_index)
+					if (index != state->peer[i].requestq[state->peer[i].qlen] || get_bit(state->have, index))
 					{
-						printf("peer sent wrong piece\n");
 						break;
 					}
 					
@@ -136,11 +161,14 @@ int parse_msgs(struct state *state, int i)
 					{
 						if (check_hash(state->peer[i].curr_piece, index))
 						{
-							printf("downloaded piece %x\n", index);
+							got++;
+							printf("%.02f%%\b\b\b\b\b\b\b", ((float)got*100)/mi->num_pieces);
+							fflush(stdout);
 							set_bit(state->have, index, 1);
-							set_bit(state->pending_reqs, index, 0);
+							state->peer[i].downloaded++;
+							state->peer[i].qlen--;
 							
-							//write_to_file(state->peer[i].curr_piece, begin);
+							write_to_file(state->peer[i].curr_piece, begin);
 							
 							msg.length = htonl(5);
 							msg.id = HAVE;
@@ -149,15 +177,15 @@ int parse_msgs(struct state *state, int i)
 							for (p = 0; p < state->peer_num; p++)
 								send(state->peer[p].sock, &msg, 9, 0);
 							
-							state->peer[i].curr_index = min(state);
-							printf("selected piece %x\n", state->peer[i].curr_index);
 						}
 						else
 						{
-							printf("piece did not match hash!\n");
+							//printf("piece did not match hash!\n");
 							break;
 						}
-											
+						
+						set_bit(state->pending_reqs, index, 0);
+						
 						memset(state->peer[i].curr_piece, 0, mi->piece_length);
 						state->peer[i].piece_offset = 0;
 						state->peer[i].block_len = BLOCK_LEN;
@@ -185,13 +213,15 @@ int parse_msgs(struct state *state, int i)
 
 void start_pwp(struct state *state)
 {
-	int i, sockfd;
+	int i, j, sockfd;
 	struct sockaddr_in peer_addr;
 	struct pollfd peer_fds[MAX_PEERS];
 	
 	struct handshake hs;
 	struct msg msg;
-		
+	
+	int index;
+			
 	hs = (struct handshake)
 	{
 		.pstrlen  = 0x13,
@@ -237,62 +267,64 @@ void start_pwp(struct state *state)
 		
 		for (i = 0; i < state->peer_num; i++)
 		{
-			if (peer_fds[i].revents & POLLOUT && !state->peer[i].sent_hs)
+			if (!state->peer[i].sent_hs && peer_fds[i].revents & POLLOUT)
 			{
 				state->peer[i].recv_buffer	= malloc(100000);
 				state->peer[i].recv_len		= 0;
-				state->peer[i].recvd_choke	= true;
-				state->peer[i].sent_choke	= false;
-				state->peer[i].recvd_interested = false;
-				state->peer[i].sent_interested = false;
-				state->peer[i].bitfield		= 0;
-				state->peer[i].sent_interested = false;
-				state->peer[i].send_time = 0;
-				state->peer[i].curr_piece	= calloc(mi->piece_length, sizeof (unsigned char));
-				state->peer[i].piece_offset = 0;
-				state->peer[i].block_len = BLOCK_LEN;
-				state->peer[i].send_time = 0;
 				state->peer[i].sent_hs = true;
 				state->peer[i].connected = false;
-				
-				state->peer[i].curr_index = rand()%mi->num_pieces;
 
 				send(peer_fds[i].fd, &hs, sizeof(hs), 0);
 			}
 			
 			if ((peer_fds[i].revents & POLLIN) && state->peer[i].sent_hs)
 			{
-				parse_msgs(state, i);
+				if (parse_msgs(state, i) == -1)
+					continue;
+				// assign first piece if new peer
+				if (state->peer[i].requestq[state->peer[i].qlen] == -1)
+					for (j = 0; j < mi->num_pieces; j++)
+						if (!get_bit(state->pending_reqs, j) && !get_bit(state->have, j) && get_bit(state->peer[i].bitfield, j))
+							state->peer[i].requestq[state->peer[i].qlen] = j;
 				
-// 				if (state->peer[i].send_time+5 > time(NULL))
+// 				if (!state->peer[i].send_time && state->peer[i].send_time+5 < time(NULL))
 // 				{
-// 					state->peer[i].sent_choke = true;
+// 					set_bit(state->pending_reqs, state->peer[i].requestq[state->peer[i].qlen], 0);
+//					state->peer[i].sent_choke = true;
+// 					state->peer[i].send_time = 0;
+// 					
 // 					continue;
 // 				}
+							
+				if (state->peer[i].downloaded > 0)
+					for (j = state->peer[i].qlen; j < QUEUE_LEN; j++)
+					{
+						index = min(state);
+						if (index == -1)
+							break;
+						state->peer[i].requestq[state->peer[i].qlen++] = index;
+						set_bit(state->pending_reqs, index)
+					}
 				
-				if (state->qd_requests < QUEUE_LEN && state->peer[i].connected && get_bit(state->peer[i].bitfield, state->peer[i].curr_index))
+				if (state->peer[i].recvd_choke && !state->peer[i].sent_interested && !state->peer[i].sent_choke)
 				{
-					if (state->peer[i].recvd_choke && !state->peer[i].sent_interested && !state->peer[i].sent_choke)
-					{
-						msg.length	= htonl(1);
-						msg.id		= INTERESTED;
-						send(peer_fds[i].fd, &msg, 5, 0);
-						state->peer[i].sent_interested = true;
-					}
-					else if (!state->peer[i].recvd_choke && !state->peer[i].sent_choke && !state->peer[i].send_time)
-					{
-						msg.length			= htonl(13);
-						msg.id				= REQUEST;
-						msg.request.index	= htonl(state->peer[i].curr_index);
-						msg.request.begin	= htonl(state->peer[i].piece_offset);
-						msg.request.length	= htonl(state->peer[i].block_len);
-						
-						printf("sending request for index %x\n", state->peer[i].curr_index);
-						send(peer_fds[i].fd, &msg, 17, 0);
-						set_bit(state->pending_reqs, state->peer[i].curr_index, 1);
-						state->qd_requests++;
-						state->peer[i].send_time = time(NULL);
-					}
+					msg.length	= htonl(1);
+					msg.id		= INTERESTED;
+					send(peer_fds[i].fd, &msg, 5, 0);
+					state->peer[i].sent_interested = true;
+				}
+				else if (!state->peer[i].recvd_choke && !state->peer[i].sent_choke && !state->peer[i].send_time)
+				{
+					msg.length			= htonl(13);
+					msg.id				= REQUEST;
+					msg.request.index	= htonl(state->peer[i].requestq[state->peer[i].qlen]);
+					msg.request.begin	= htonl(state->peer[i].piece_offset);
+					msg.request.length	= htonl(state->peer[i].block_len);
+					
+					//printf("sending request for index %x\n", state->peer[i].requestq[state->peer[i].qlen]);
+					send(peer_fds[i].fd, &msg, 17, 0);
+					set_bit(state->pending_reqs, state->peer[i].requestq[state->peer[i].qlen], 1);
+					state->peer[i].send_time = time(NULL);
 				}
 			}
 		}
