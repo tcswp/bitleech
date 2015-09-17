@@ -81,7 +81,7 @@ int parse_msgs(struct state *state, int i)
 			state->peer[i].send_time = 0;
 			state->peer[i].curr_piece	= calloc(mi->piece_length, sizeof (unsigned char));
 			state->peer[i].qlen = 0;
-			state->peer[i].requestq[qlen] = -1;
+			state->peer[i].requestq[0] = -1;
 			state->peer[i].downloaded = 0;
 		}
 		else
@@ -154,7 +154,6 @@ int parse_msgs(struct state *state, int i)
 					}
 					
 					memcpy(state->peer[i].curr_piece+begin, id+9, length);
-					state->qd_requests--;
 					state->peer[i].send_time = 0;
 					
 					if (begin+length == mi->piece_length)
@@ -220,7 +219,7 @@ void start_pwp(struct state *state)
 	struct handshake hs;
 	struct msg msg;
 	
-	int index;
+	int index, flags;
 			
 	hs = (struct handshake)
 	{
@@ -236,8 +235,10 @@ void start_pwp(struct state *state)
 	printf("connecting to peers...\n");
 	for (i = 0; i < state->peer_num; i++)
 	{
-		if ((sockfd = socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK, 0)) == -1)
+		if ((sockfd = socket(AF_INET, SOCK_STREAM /*| SOCK_NONBLOCK*/, 0)) == -1)
 			err("error opening socket");
+		flags = fcntl(sockfd, F_GETFL, 0);
+		fcntl(sockfd, F_SETFL, flags | O_NONBLOCK);
 
 		// fill in peer info
 		memset(&peer_addr, 0,  sizeof(peer_addr));
@@ -257,7 +258,6 @@ void start_pwp(struct state *state)
 	state->piece_freq 	= calloc(mi->num_pieces,sizeof (int));
 	state->have 	 	= calloc(ceil(((float)mi->num_pieces)/8),sizeof (unsigned char));
 	state->pending_reqs  = calloc(ceil(((float)mi->num_pieces)/8), sizeof (unsigned char));
-	state->qd_requests  = 0;
 	
 	signal(SIGPIPE, SIG_IGN);
 	while (1)
@@ -303,7 +303,7 @@ void start_pwp(struct state *state)
 						if (index == -1)
 							break;
 						state->peer[i].requestq[state->peer[i].qlen++] = index;
-						set_bit(state->pending_reqs, index)
+						set_bit(state->pending_reqs, index, 1);
 					}
 				
 				if (state->peer[i].recvd_choke && !state->peer[i].sent_interested && !state->peer[i].sent_choke)

@@ -75,8 +75,8 @@ int http_announce(struct state *state, char *hostname, char *path, char *port, i
 	return 0;
 }
 
-inline long long htonll(long long h){return (long long) htonl(h)<<32|htonl(h>>32);}
-inline long long ntohll(long long n){return (long long) ntohl(n)<<32|ntohl(n>>32);}
+//inline long long htonll(long long h){return (long long) htonl(h)<<32|htonl(h>>32);}
+//inline long long ntohll(long long n){return (long long) ntohl(n)<<32|ntohl(n>>32);}
 
 int udp_announce(struct state *state, char *hostname, char *path, char *port, struct addrinfo *res, int sockfd)
 {

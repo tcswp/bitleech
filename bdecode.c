@@ -2,7 +2,7 @@
 
 extern struct metainfo *mi;
 
-inline void indent(int i) {int j; for (j = 0; j < i; j++) putchar('\t');};
+static inline void indent(int i) {int j; for (j = 0; j < i; j++) putchar('\t');};
 
 void parse_dict(struct state *state, char *benc, int *pos, int depth)
 {

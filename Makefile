@@ -1,7 +1,7 @@
 CC=gcc
 TARGET=test
 CFLAGS=-Wall -g -O0 -DDEBUG
-LDFLAGS=-pthread -lm -lssl -lcrypto
+LDFLAGS=-lm -lssl -lcrypto
 OBJS=bdecode.o tracker.o metainfo.o file.o peer.o main.o
 
 default: $(TARGET)
@@ -21,6 +21,6 @@ peer.o: peer.c
 	$(CC) $(CFLAGS) -c peer.c
 main.o: main.c
 	$(CC) $(CFLAGS) -c main.c
-	
+
 clean:
 	-@rm *.o $(TARGET) *~

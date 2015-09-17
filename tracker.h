@@ -6,7 +6,7 @@
 void err(char *msg);
 void encode_url(char *enc_str, char *str, int len);
 int http_announce(struct state *state, char *hostname, char *path, char *port, int sockfd);
-inline long long htonll(long long h);
+//inline long long htonll(long long h);
 int udp_announce(struct state *state, char *hostname, char *path, char *port, struct addrinfo *res, int sockfd);
 void announce();
 void decode_peers(struct state *s, unsigned char *block, int len);
