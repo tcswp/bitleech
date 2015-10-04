@@ -1,6 +1,6 @@
 CC=gcc
 TARGET=test
-CFLAGS=-Wall -g -O0 -DDEBUG
+CFLAGS=-Wall -g
 LDFLAGS=-lm -lssl -lcrypto
 OBJS=bdecode.o tracker.o metainfo.o file.o peer.o main.o
 

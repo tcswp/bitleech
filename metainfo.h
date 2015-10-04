@@ -5,7 +5,7 @@
 #define MAX_PEERS	60
 #define QUEUE_LEN	10
 
-typedef enum {false, true} bool;
+#include "peer.h"
 
 struct file
 {
@@ -26,53 +26,6 @@ struct metainfo
   char 			name[FILENAME_MAX];
   struct file   file[256];
   int			file_num;
-};
-
-struct peer
-{
-	unsigned int 		ip;
-	unsigned short 		port;
-	bool 				connected;
-	char 				*recv_buffer;
-	int 				recv_len;
-	int					sock;
-	bool				sent_hs;
-	time_t				send_time;
-	int					requestq[QUEUE_LEN];
-	int					qlen;
-	int					downloaded;
-	
-	unsigned char  		*bitfield;
-	bool				recvd_choke;
-	bool				sent_choke;
-	bool				recvd_interested;
-	bool				sent_interested;
-	
-	int			piece_offset;
-	unsigned char *curr_piece;
-	int			block_len;
-	
-	char peer_id[20];
-};
-
-struct state
-{
-  int 			*piece_freq;
-  unsigned char *have;
-
-  int			uploaded;
-  int			downloaded;
-  unsigned long	left;
-  char 			event[9];
-  struct peer 	peer[MAX_PEERS];
-  int			peer_num;
-  
-  unsigned char *pending_reqs;
-  
-  int			interval;
-  char			tracker_id[256];
-  int			complete;
-  int			incomplete;
 };
 
 void fill_struct(struct state *state, const char *key, void *value, int len);
