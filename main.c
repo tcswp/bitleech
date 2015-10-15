@@ -1,27 +1,32 @@
 #include "torrc.h"
 
-struct metainfo *mi;
-
 int main(int argc, char **argv)
 {
-	struct state state = {0};
-	mi = malloc(sizeof (struct metainfo));
-
+	struct metainfo metainfo;
+	struct announce_res ares = {0};
+	struct state state;
 	char *name = argv[1];
 
 	printf("NanoBT 1.0\nAuthor: Cheeve\n\n");
 
-	open_torrent_file(name);
-
-	//printf("\n\nSHA1 info hash: %20s\n", mi->info_hash);
-	printf("\n%d pieces @ %d bytes = %f MB\n", mi->num_pieces, mi->piece_length, ((float)mi->piece_length)*mi->num_pieces/1000000);
-
-	announce(&state);
-
-	if (state.peer_num == 0)
-		printf("no peers...\n");
-	else
-		start_pwp(&state);
+	read_torrent_file(&metainfo, name);
+	
+	// need to fetch these values from a save file
+	state = (struct state)
+	{
+		.uploaded = 0, 
+		.downloaded = 0,
+		.left  =  metainfo.num_pieces,
+		.event = "started"
+	};
+	
+	do
+	{
+		announce(metainfo.info_hash, &ares, &state, metainfo.announce_list);
+	}
+	while (!ares.peer_num && sleep(ares.interval));
+	
+	start_pwp(ares.peer, ares.peer_num, &state, &metainfo);
 
 	return 0;
 }

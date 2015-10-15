@@ -1,7 +1,5 @@
 #include "torrc.h"
 
-extern struct metainfo *mi;
-
 void encode_url(char* enc_str, char *str, int len)
 {
 	int i;
@@ -24,18 +22,21 @@ void encode_url(char* enc_str, char *str, int len)
 	}
 }
 
-void decode_peers(struct state *s, unsigned char *block, int len)
+int decode_peers(struct announce_res *ares, unsigned char *block, int len)
 {
-	int i;
-	s->peer_num = (len/6>MAX_PEERS)?MAX_PEERS:len/6;
-	for (i = 0; i < s->peer_num; i++)
+	int i, num_peers;
+	
+	num_peers = (len/6>MAX_PEERS)?MAX_PEERS:len/6;
+	for (i = 0; i < num_peers; i++)
 	{
-		s->peer[i].ip   = ntohl(*(long *)(block+i*6));
-		s->peer[i].port = ntohs(*(short *)(block+i*6+4));
+		ares->peer[i].ip   = ntohl(*(long *)(block+i*6));
+		ares->peer[i].port = ntohs(*(short *)(block+i*6+4));
 	}
+	
+	return num_peers;
 }
 
-int http_announce(struct state *state, char *hostname, char *path, char *port, int sockfd)
+int http_announce(unsigned char *info_hash, struct announce_res *ares, struct state *state, char *hostname, char *path, char *port, int sockfd)
 {	
 	char request[MAX_STR], buffer[MAX_STR];
 	int response_size;
@@ -44,14 +45,12 @@ int http_announce(struct state *state, char *hostname, char *path, char *port, i
 	char peer_id_enc[25] = {0};
 	char info_hash_enc[61] = {0};
 	char *message_offset;
-
-	int pos = 0;
 	
-	encode_url(info_hash_enc,(char *) mi->info_hash, 20);
+	encode_url(info_hash_enc,(char *) info_hash, 20);
 	encode_url(peer_id_enc, PEER_ID, 20);
 	strcpy(state->event, "started");
 
-	sprintf(req_params, "/%s?info_hash=%s&compact=%d&peer_id=%s&port=%d&uploaded=%d&downloaded=%d&left=%lu&event=%s"
+	sprintf(req_params, "/%s?info_hash=%s&compact=%d&peer_id=%s&port=%d&uploaded=%d&downloaded=%d&left=%d&event=%s"
 	,path,info_hash_enc,COMPACT,peer_id_enc,PORT,state->uploaded,state->downloaded,state->left,state->event);
 	
 	sprintf(request, "GET %s HTTP/1.1\r\nHost: %s\r\n\r\n", req_params, hostname);
@@ -70,7 +69,7 @@ int http_announce(struct state *state, char *hostname, char *path, char *port, i
 	// remove http header
 	memcpy(buffer, message_offset, response_size);
 	
-	parse_dict(state, buffer, &pos, 1);
+	parse_dict(&set_ares, ares, buffer);
 	
 	return 0;
 }
@@ -78,7 +77,7 @@ int http_announce(struct state *state, char *hostname, char *path, char *port, i
 static inline long long htonll(long long h){return (long long) htonl(h)<<32|htonl(h>>32);}
 static inline long long ntohll(long long n){return (long long) ntohl(n)<<32|ntohl(n>>32);}
 
-int udp_announce(struct state *state, char *hostname, char *path, char *port, struct addrinfo *res, int sockfd)
+int udp_announce(unsigned char *info_hash, struct announce_res *ares, struct state *state, char *hostname, char *path, char *port, struct addrinfo *res, int sockfd)
 {
 	int recv_size;
 
@@ -86,7 +85,7 @@ int udp_announce(struct state *state, char *hostname, char *path, char *port, st
 	struct connect_res  cres;
 	struct announce_req areq;
 
-	unsigned char ares[MAX_RECV] = {0};
+	unsigned char response[MAX_RECV] = {0};
 	long action;
 	long transaction_id;
 	
@@ -130,21 +129,22 @@ int udp_announce(struct state *state, char *hostname, char *path, char *port, st
 		.port			= htons(PORT)
 	};
 
-	memcpy(areq.info_hash,mi->info_hash,20);
+	memcpy(areq.info_hash,info_hash,20);
 	memcpy(areq.peer_id,PEER_ID,20);
 	
 	if (sendto(sockfd, &areq, sizeof(struct announce_req), 0, res->ai_addr, res->ai_addrlen) == -1)
 		err("error sending UDP announce message");
 	printf("sent announce message.\n");
 
-	if ((recv_size = recvfrom(sockfd, ares, MAX_RECV, 0, res->ai_addr, &(res->ai_addrlen))) < 1)
+	if ((recv_size = recvfrom(sockfd, response, MAX_RECV, 0, res->ai_addr, &(res->ai_addrlen))) < 1)
 		err("error receiving UDP announce response");
-
+	printf("received announce response\n");
+	
 	if (recv_size < 20)
 		err("UDP announce response is under 20 bytes!");
 
-	memcpy(&action, ares, 4);
-	memcpy(&transaction_id, ares+4, 4);
+	memcpy(&action, response, 4);
+	memcpy(&transaction_id, response+4, 4);
 
 	if (transaction_id != areq.transaction_id)
 	{
@@ -156,20 +156,19 @@ int udp_announce(struct state *state, char *hostname, char *path, char *port, st
 	if (ntohl(action) != 1)
 	{
 		printf("tracker sent action %lx: ", action);
-		printf("%s\n", ares+8);
+		printf("%s\n", response+8);
 		err("UDP tracker sent unexpected action");
 	}
 
-	state->interval   = ntohl(*(long *)(ares+8));
-	state->complete   = ntohl(*(long *)(ares+12));
-	state->incomplete = ntohl(*(long *)(ares+16));
-
-	decode_peers(state, ares+20, recv_size-20);
+	ares->interval   = ntohl(*(long *)(response+8));
+	ares->complete   = ntohl(*(long *)(response+12));
+	ares->incomplete = ntohl(*(long *)(response+16));
+	ares->peer_num 	 = decode_peers(ares, response+20, recv_size-20);
 	
 	return 0;
 }
 
-void announce(struct state *state)
+void announce(unsigned char *info_hash, struct announce_res *ares, struct state *state, char (*announce_list)[256])
 {
 	char tracker_url[MAX_STR];
 	char hostname[MAX_STR], proto[5], port[6], path[32];
@@ -180,11 +179,11 @@ void announce(struct state *state)
 	
 	int i;
 	
-	for (i = 0; mi->announce_list[i] != NULL; i++)
+	for (i = 0; announce_list[i] != NULL; i++)
 	{
 		putchar('\n');
 	
-		strcpy(tracker_url, mi->announce_list[i]);
+		strcpy(tracker_url, announce_list[i]);
 
 		if (sscanf(tracker_url, "%*[^:]://%[^:,/]", hostname) != 1)
 			err("url hostname pattern match failed");
@@ -230,7 +229,7 @@ void announce(struct state *state)
 		if (!strcmp(proto, "udp"))
 		{
 			printf("trying udp tracker...\n");
-			if (udp_announce(state, hostname, path, port, res, sockfd) == 0)
+			if (udp_announce(info_hash, ares, state, hostname, path, port, res, sockfd) == 0)
 				break;
 		}
 		else if (!strcmp(proto, "http"))
@@ -240,11 +239,11 @@ void announce(struct state *state)
 			if (connect(sockfd, res->ai_addr, res->ai_addrlen) == -1)
 				err("can't connect to tracker.");
 
-			if (http_announce(state, hostname, path, port, sockfd) == 0)
+			if (http_announce(info_hash, ares, state, hostname, path, port, sockfd) == 0)
 				break;
 		}
 		else err("invalid protocol");
 	}
-
+	
 	freeaddrinfo(res);
 }

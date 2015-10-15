@@ -17,6 +17,7 @@
 #include <pthread.h>
 #include <fcntl.h>			// O_NONBLOCK
 #include <poll.h>
+#include <stdbool.h>
 
 #include "metainfo.h"
 #include "file.h"

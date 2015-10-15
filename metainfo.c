@@ -1,30 +1,52 @@
 #include "torrc.h"
 
-extern struct metainfo *mi;
-
-#define STR_IS(str)	!strcmp(key, str)
-
-void fill_struct(struct state *state, const char *key, void *value, int len)
-{	
-	//metainfo struct
-	if (STR_IS("announce") ||
-	    STR_IS("announce-list"))		 strcpy(mi->announce_list[mi->announce_num++], (char *) value);
-	else if (STR_IS("length")) 		 	 (mi->file[mi->file_num]).length = (int) value;
-	else if (STR_IS("path"))		     strcpy((mi->file[mi->file_num++]).path,(char *) value);
-	else if (STR_IS("piece length"))	 mi->piece_length = (int) value;
-	else if (STR_IS("pieces"))
-	{
-		memcpy(mi->pieces, (unsigned char *)value, len);
-		mi->num_pieces = len/20;
-	}
-	else if (STR_IS("name"))	  		 strcpy(mi->name, (char *) value);
-	else if (STR_IS("info_hash"))		 memcpy(mi->info_hash, (unsigned char *) value, 20);
-	//state struct filled when http tracker responds with bencoding
-	else if (STR_IS("interval"))		 state->interval = (int) value;
-	else if (STR_IS("tracker_id"))	 	 memcpy(state->tracker_id,(char *)value, len);
-	else if (STR_IS("complete"))		 state->complete = (int) value;
-	else if (STR_IS("incomplete"))		 state->incomplete = (int) value;
-	else if (STR_IS("peers"))			 decode_peers(state, (unsigned char*)value, len);
+int check_hash(unsigned char *piece, int index, struct metainfo *metainfo)
+{
+	return !memcmp(SHA1(piece,piece_length(metainfo, index),NULL),metainfo->pieces+20*index,20);
 }
 
-int check_hash(unsigned char *piece, int index){ return !memcmp(SHA1(piece,mi->piece_length,NULL),mi->pieces+20*index,20); }
+
+void set_metainfo(void *strct, const char *key, void *value, int len)
+{	
+	struct metainfo *metainfo = (struct metainfo *) strct;
+
+	if (!strcmp(key,"announce") || !strcmp(key,"announce-list"))
+		strcpy(metainfo->announce_list[metainfo->announce_num++], (char *) value);
+	else if (!strcmp(key,"length")) 		 	 
+	{
+		if (metainfo->multi_file_mode)
+			(metainfo->file[metainfo->file_num]).length = (int) value;
+		else
+			metainfo->length = (int) value;
+	}
+	else if (!strcmp(key,"path"))
+		strcpy((metainfo->file[metainfo->file_num++]).path,(char *) value);
+	else if (!strcmp(key,"piece length"))
+		metainfo->piece_length = (int) value;
+	else if (!strcmp(key,"pieces"))
+	{
+		memcpy(metainfo->pieces, (unsigned char *)value, len);
+		metainfo->num_pieces = len/20;
+		metainfo->last_piece_length = metainfo->length-((metainfo->num_pieces-1)*metainfo->piece_length);
+	}
+	else if (!strcmp(key,"name"))
+		strcpy(metainfo->name, (char *) value);
+	else if (!strcmp(key,"info_hash"))
+		memcpy(metainfo->info_hash, (unsigned char *) value, 20);
+}
+
+void set_ares(void *strct, const char *key, void *value, int len)
+{
+	struct announce_res *ares = (struct announce_res *) strct;
+
+	if (!strcmp(key,"interval"))
+		ares->interval = (int) value;
+	else if (!strcmp(key,"tracker_id"))
+		memcpy(ares->tracker_id,(char *)value, len);
+	else if (!strcmp(key,"complete"))
+		ares->complete = (int) value;
+	else if (!strcmp(key,"incomplete"))
+		ares->incomplete = (int) value;
+	else if (!strcmp(key,"peers"))
+		ares->peer_num = decode_peers(ares, (unsigned char*)value, len);
+}

@@ -1,140 +1,145 @@
 #include "torrc.h"
 
-extern struct metainfo *mi;
-
 static inline void indent(int i) {int j; for (j = 0; j < i; j++) putchar('\t');};
 
-void parse_dict(struct state *state, char *benc, int *pos, int depth)
+int parse_int(char *benc, int *n)
 {
-	dict_t dict_pos;
-	char str[MAX_STR];
-	char dict_key[64];
-	int i, len;
+	char intstr[16];
+	int i;
 
-	dict_pos = key;
-	(*pos)++;
+	for (i=1; benc[i] != 'e'; i++)
+		intstr[i-1] = benc[i];
+	intstr[i]='\0';
+
+	*n = strtoul(intstr, NULL, 10);
+	return i+1;
+}
+
+int parse_string(char *benc, char *str, int *len)
+{
+	int i, j;
+	int length;
+	char templen[16]; /* longest string length of num */
+
+	for (i=0; benc[i] != ':' && benc[i] >= '0' && benc[i] <= '9'; i++)
+		templen[i] = benc[i];
+	templen[i] = '\0';
+
+	length = atoi(templen);
+	str[length] = '\0';
+
+	for (j=0; j<length; j++)
+		str[j] = benc[j+i+1];
+
+	*len = length;
+	return length+i+1;
+}
+
+int parse_list(void (*strct_fill_callback)(void *strct, const char *key, void *value, int len), void *strct, char *benc, char *key)
+{
+	int offset = 1;
+	char c = benc[0];
+
+	char str[0x8000];
+	int n, len;
+
+	printf("[");
+
+	while (c != 'e')
+	{
+		c = benc[offset];
+		if (c == 'd')
+		{
+			offset+=parse_dict(strct_fill_callback, strct, benc+offset);
+		}
+		else if (c == 'l')
+		{
+			offset+=parse_list(strct_fill_callback, strct, benc+offset, key);
+		}
+		else if (c == 'i')
+		{
+			offset+=parse_int(benc+offset, &n);
+			printf(" => %d\n", n);
+			strct_fill_callback(strct, key, (int *) n, 0);
+		}
+		else if (c >= '0' && c <= '9')
+		{
+			offset+=parse_string(benc+offset, str, &len);
+			printf("%s", str);
+			strct_fill_callback(strct, key, str, len);
+		}
+	}
+
+	printf("]");
+
+	return offset+1;
+}
+
+int parse_dict(void (*strct_fill_callback)(void *strct, const char *key, void *value, int len), void *strct, char *benc)
+{
+	int offset = 1;
+	static int depth;
+	dict_t keyval = key;
+	char c;
+
+	char str[0x8000];
+	char dict_key[64];
+	int n, len;
 	
 	printf("{");
+	depth++;
 
-	while (benc[*pos] != 'e')
+	while (c != 'e')
 	{
-		if (benc[*pos] == 'd')
+		c = benc[offset];
+		if (c == 'd')
 		{
-			parse_dict(state, benc, pos, depth+1);
+			offset+=parse_dict(strct_fill_callback, strct, benc+offset);
 			if (!strcmp("info",dict_key))
-				mi->info_end = *pos;
+				((struct metainfo *) strct)->info_end = offset;
+			if (!strcmp("files",dict_key))
+				((struct metainfo *) strct)->multi_file_mode = true;
 		}
-		else if (isdigit(benc[*pos]))
+		else if (c == 'l')
 		{
-			len = parse_string(benc, pos, str);
-			if (dict_pos == key)
+			offset+=parse_list(strct_fill_callback, strct, benc+offset, dict_key);
+		}
+		else if (c == 'i')
+		{
+			offset+=parse_int(benc+offset, &n);
+			printf("%d", n);
+			strct_fill_callback(strct, dict_key, (int *) n, 0);
+		}
+		else if (c >= '0' && c <= '9')
+		{
+			offset+=parse_string(benc+offset, str, &len);
+			if (keyval == key)
 			{
 				putchar('\n');
 				indent(depth);
 				printf("%s => ", str);
 				
 				if (!strcmp("info",str))
-					mi->info_begin = *pos;
-
+					((struct metainfo *) strct)->info_begin = offset;
+				
 				strcpy(dict_key, str);
-				dict_pos = value;
+				keyval = value;
 				continue;
 			}
 			else
 			{
 				printf("%s", str);
-				fill_struct(state, dict_key, (char *) str, len);
+				strct_fill_callback(strct, dict_key, str, len);
 			}
 		}
-		else if (benc[*pos] == 'i')
-		{
-			i = parse_int(benc, pos);
-			printf("%d", i);
-			fill_struct(state, dict_key, (int *) i,0);
-		}
-		else if (benc[*pos] == 'l')
-		{
-			parse_list(state, benc, pos, dict_key, depth);
-			(*pos)++;
-		}
-
-		dict_pos = key;
-	}
 	
-	putchar('\n');
-	indent(depth-1);
-	printf("}\n");
-	(*pos)++;
-}
-
-void parse_list(struct state *state, char *benc, int *pos, char *curr_key, int depth)
-{
-	int len, i;
-	char str[MAX_STR];
-
-	(*pos)++;
-
-	printf("[");
- 
-	while (benc[*pos] != 'e')
-	{
-		if (isdigit(benc[*pos]))
-		{
-			len = parse_string(benc, pos, str);
-			printf("%s", str);
-			fill_struct(state, curr_key, str, len);
-		}
-		else if (benc[*pos] == 'l')
-		{
-			parse_list(state, benc, pos, curr_key, depth);
-			(*pos)++;
-		}
-		else if (benc[*pos] == 'i')
-		{
-			i = parse_int(benc, pos);
-			printf(" => %d\n", i);
-			fill_struct(state, curr_key, (int *) i,0);
-		}
-		else if (benc[*pos] == 'd')
-		{
-			parse_dict(state, benc, pos, depth+1);
-		}
+		keyval = key;
 	}
-	printf("]");
-}
 
-int parse_int(char *benc, int *pos)
-{
-	char intstr[16];
-	int i;
+	depth--;
+	putchar('\n');
+	indent(depth);
+	printf("}\n");
 
-	(*pos)++;
-
-	for (i=0; benc[*pos] != 'e'; i++, (*pos)++)
-		intstr[i] = benc[*pos];
-	intstr[i]='\0';
-
-	(*pos)++;
-
-	return strtoul(intstr, NULL, 10);
-}
-
-int parse_string(char *benc, int *pos, char *str)
-{
-	int i;
-	int length;
-	char templen[16]; /* longest string length of num */
-
-	for (i=0; benc[*pos] != ':' && isdigit(benc[*pos]); i++, (*pos)++)
-		templen[i] = benc[*pos];
-	templen[i] = '\0';
-
-	length = atoi(templen);
-	str[length] = '\0';
-
-	/* incr pos to move i past ':' */
-	for (i=0, (*pos)++; i<length; (*pos)++, i++)
-		str[i] = benc[*pos];
-
-	return length;
+	return offset+1;
 }
