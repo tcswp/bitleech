@@ -32,7 +32,7 @@ void read_torrent_file(struct metainfo *metainfo, char *filename)
 	
 	parse_dict(&set_metainfo, metainfo, benc);
 	
-	if (access(metainfo->name, F_OK) != -1)
+	if (!access(metainfo->name, F_OK))
 	{
 		do
 		{
@@ -41,6 +41,15 @@ void read_torrent_file(struct metainfo *metainfo, char *filename)
 		}
 		while (!(c == 'y' || c == 'n'));
 		if (c == 'n') exit(0);
+	}
+	
+	if (metainfo->multi_file_mode)
+	{
+		mkdir(metainfo->name, 0777);
+		if (chdir(metainfo->name) == -1)
+			err("chdir\n");
+		for (i = 0; i < metainfo->file_num; i++)
+			fopen(metainfo->file[i].path, "w");
 	}
 	else
 		fopen(metainfo->name, "w");
@@ -56,62 +65,63 @@ void read_torrent_file(struct metainfo *metainfo, char *filename)
 	fclose(fp);
 }
 
-// void write_to_file(unsigned char *piece, int index, int length)
-// {
-// 	FILE *fp, *fp1, *fp2;
-// 	int i, flen;
-// 	
-// 	unsigned char p1[length-1];
-// 	unsigned char p2[length-1];
-// 	int p1len, p2len;
-// 	
-// 	char path[MAX_FILE];
-// 	
-// 	//struct stat st = {0};
-// 
-// 	if (!metainfo->multi_file_mode)
-// 	{
-// 		fp = fopen(metainfo->name, "r+b");
-// 		fseek(fp, index*metainfo->piece_length, SEEK_SET);
-// 		fwrite(piece, sizeof (char), length, fp);
-// 		fclose(fp);
-// 	}
-// // 	else
-// // 	{
-// // 		if (stat(metainfo->name, &st) == -1) // use access
-// // 			mkdir(metainfo->name, 0700);
-// // 		sprintf(path, "./%s/", metainfo->name);
-// // 	
-// // 		flen = 0;
-// // 		for (i = 0; i < metainfo->file_num; i++)
-// // 		{
-// // 			strcat(path, metainfo->file[i].path);
-// // 			flen += metainfo->file[i].length;
-// // 			if (begin < flen && begin+length < flen) // piece fits nicely into file
-// // 			{
-// // 				fp = fopen(path, "ab");
-// // 				fseek(fp, begin, SEEK_SET);
-// // 				fwrite(piece, sizeof (char), length, fp);
-// // 				fclose(fp);
-// // 				break;
-// // 			}
-// // 			else if (begin < flen && begin+length > flen) // piece spans across files
-// // 			{
-// // 				p1len = flen-begin;
-// // 				p2len = (begin+length)-flen;
-// // 				memcpy(p1, piece, p1len);
-// // 				memcpy(p2, piece+p1len, p2len);
-// // 				fp1 = fopen(path, "ab");
-// // 				fwrite(p1, sizeof (char), p1len, fp1);
-// // 				sprintf(path, "./%s/%s", metainfo->name, metainfo->file[i].path);
-// // 				fp2 = fopen(path, "ab");
-// // 				fseek(fp1, begin, SEEK_SET);
-// // 				//fseek(fp2, 0, SEEK_SET);
-// // 				fwrite(p2, sizeof (char), p2len, fp2);
-// // 				fclose(fp1);
-// // 				fclose(fp2);
-// // 				break;			
-// // 			}
-// // 		}
-// // 	}
-// }
+void write_to_file(struct metainfo *metainfo, unsigned char *piece, int index)
+{
+	FILE *fp, *fp1, *fp2;
+	unsigned long flen;
+	int i;
+	
+	int begin = index*metainfo->piece_length;
+	int length = piece_length(metainfo, index);
+	
+	unsigned char p1[length];
+	unsigned char p2[length];
+	int p1len, p2len;
+
+	if (!metainfo->multi_file_mode)
+	{
+		fp = fopen(metainfo->name, "r+b");
+		fseek(fp, begin, SEEK_SET);
+		fwrite(piece, sizeof (char), length, fp);
+		fclose(fp);
+	}
+	else
+	{
+		flen = 0;		
+		for (i = 0; i < metainfo->file_num; i++)
+		{
+			if (i > 1)
+				begin -= metainfo->file[i-1].length;
+			
+			flen += metainfo->file[i].length;
+			if (begin < flen && begin+length <= flen) // piece fits nicely into file
+			{
+				fp = fopen(metainfo->file[i].path, "r+b");
+				fseek(fp, begin, SEEK_SET);
+				fwrite(piece, sizeof (char), length, fp);
+				fclose(fp);
+				break;
+			}
+			else if (begin < flen && begin+length > flen) // piece spans across files
+			{
+				
+				
+				p1len = flen-begin;
+				memcpy(p1, piece, p1len);
+				fp1 = fopen(metainfo->file[i].path, "r+b");
+				fseek(fp1, begin, SEEK_SET);
+				fwrite(p1, sizeof (char), p1len, fp1);
+				fclose(fp1);
+				
+				p2len = (begin+length)-flen;
+				memcpy(p2, piece+p1len, p2len);
+				fp2 = fopen(metainfo->file[i+1].path, "r+b");
+				fseek(fp2, 0, SEEK_SET);
+				fwrite(p2, sizeof (char), p2len, fp2);
+				fclose(fp2);
+				
+				break;
+			}
+		}
+	}
+}

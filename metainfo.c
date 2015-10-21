@@ -5,7 +5,6 @@ int check_hash(unsigned char *piece, int index, struct metainfo *metainfo)
 	return !memcmp(SHA1(piece,piece_length(metainfo, index),NULL),metainfo->pieces+20*index,20);
 }
 
-
 void set_metainfo(void *strct, const char *key, void *value, int len)
 {	
 	struct metainfo *metainfo = (struct metainfo *) strct;

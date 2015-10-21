@@ -1,0 +1,3 @@
+C programming notes:
+
+If you need to use an identifier that you have defined elsewhere or just haven't defined yet, you can use something called a forward declaration. Each time you prototype a function you are actually creating a forward declaration. It is useful to forward declare pointers to structs as well just to keep headers organized logically. You won't be able to forward declare structs or variables that aren't of a pointer type since the compiler does not yet know how much memory to allocate.

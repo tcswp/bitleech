@@ -1,13 +1,14 @@
-#define PSTR				"BitTorrent protocol"
-#define BLOCK_LEN			0x4000
+#define PSTR		"BitTorrent protocol"
+#define BLOCK_LEN	0x4000
+#define PEER_TIMEOUT 10
+#define MAX_TIMEOUT 5
 
-#ifndef PEER_H
-#define PEER_H
 typedef enum
 {
 	CHOKE, UNCHOKE, INTERESTED, NOT_INTERESTED,
 	HAVE, BITFIELD, REQUEST, PIECE, CANCEL
 } type;
+
 
 struct state
 {
@@ -69,4 +70,3 @@ struct metainfo;
 
 int piece_length(struct metainfo *metainfo, int index);
 void start_pwp(struct peer *peer, int peer_num, struct state *state, struct metainfo *metainfo);
-#endif

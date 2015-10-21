@@ -40,7 +40,7 @@ int parse_list(void (*strct_fill_callback)(void *strct, const char *key, void *v
 	int offset = 1;
 	char c = benc[0];
 
-	char str[0x8000];
+	char *str = malloc(MAX_STR);
 	int n, len;
 
 	printf("[");
@@ -59,7 +59,7 @@ int parse_list(void (*strct_fill_callback)(void *strct, const char *key, void *v
 		else if (c == 'i')
 		{
 			offset+=parse_int(benc+offset, &n);
-			printf(" => %d\n", n);
+			printf(" => %lu\n", n);
 			strct_fill_callback(strct, key, (int *) n, 0);
 		}
 		else if (c >= '0' && c <= '9')
@@ -71,6 +71,8 @@ int parse_list(void (*strct_fill_callback)(void *strct, const char *key, void *v
 	}
 
 	printf("]");
+	
+	//free(str);
 
 	return offset+1;
 }
@@ -80,9 +82,9 @@ int parse_dict(void (*strct_fill_callback)(void *strct, const char *key, void *v
 	int offset = 1;
 	static int depth;
 	dict_t keyval = key;
-	char c;
+	char c = benc[0];
 
-	char str[0x8000];
+	char *str = malloc(MAX_STR);
 	char dict_key[64];
 	int n, len;
 	
@@ -97,8 +99,6 @@ int parse_dict(void (*strct_fill_callback)(void *strct, const char *key, void *v
 			offset+=parse_dict(strct_fill_callback, strct, benc+offset);
 			if (!strcmp("info",dict_key))
 				((struct metainfo *) strct)->info_end = offset;
-			if (!strcmp("files",dict_key))
-				((struct metainfo *) strct)->multi_file_mode = true;
 		}
 		else if (c == 'l')
 		{
@@ -107,7 +107,7 @@ int parse_dict(void (*strct_fill_callback)(void *strct, const char *key, void *v
 		else if (c == 'i')
 		{
 			offset+=parse_int(benc+offset, &n);
-			printf("%d", n);
+			printf("%lu", n);
 			strct_fill_callback(strct, dict_key, (int *) n, 0);
 		}
 		else if (c >= '0' && c <= '9')
@@ -121,6 +121,8 @@ int parse_dict(void (*strct_fill_callback)(void *strct, const char *key, void *v
 				
 				if (!strcmp("info",str))
 					((struct metainfo *) strct)->info_begin = offset;
+				if (!strcmp("files",str))
+				((struct metainfo *) strct)->multi_file_mode = true;
 				
 				strcpy(dict_key, str);
 				keyval = value;
@@ -141,5 +143,7 @@ int parse_dict(void (*strct_fill_callback)(void *strct, const char *key, void *v
 	indent(depth);
 	printf("}\n");
 
+	//free(str);
+	
 	return offset+1;
 }

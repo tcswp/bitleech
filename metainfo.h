@@ -1,9 +1,8 @@
 #define MAX_FILE	0x100000
-#define MAX_STR   	0x100000
+#define MAX_STR   	0x10000
 #define MAX_PIECES	0x10000
 #define MAX_MSG		5000
 #define MAX_PEERS	60
-#define QUEUE_LEN	10
 
 struct file
 {

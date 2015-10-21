@@ -57,11 +57,11 @@ int http_announce(unsigned char *info_hash, struct announce_res *ares, struct st
 
 	printf("sending announce request to tracker...\n");
 	if (send(sockfd, request, strlen(request), 0) == -1)
-		err("error sending announce request to tracker");
+		perror("error sending announce request to tracker");
 
 	printf("receiving announce from tracker...\n");
 	if ((response_size = recv(sockfd, buffer, MAX_STR, 0)) == -1)
-		err("error receiving announce from tracker");
+		perror("error receiving announce from tracker");
 	
 	message_offset = strstr(buffer, "\r\n\r\n") + 4;
 	// subtract header length
@@ -89,6 +89,8 @@ int udp_announce(unsigned char *info_hash, struct announce_res *ares, struct sta
 	long action;
 	long transaction_id;
 	
+	struct timeval tv;
+	
 	srand(time(NULL));
 
 	creq = (struct connect_req) {
@@ -96,23 +98,37 @@ int udp_announce(unsigned char *info_hash, struct announce_res *ares, struct sta
 		.action 		= 0,
 		.transaction_id = htonl(rand())
 	};
+	
+	tv.tv_sec = 5;
+	tv.tv_usec = 0;
+	if (setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO,&tv,sizeof(tv)) < 0)
+	{
+		perror("error setting timeout on udp socket\n");
+		return -1;
+	}
 
 	if (sendto(sockfd, &creq, sizeof (struct connect_req), 0, res->ai_addr, res->ai_addrlen) == -1)
-		err("error sending UDP connect message");
+	{
+		perror("error sending UDP connect message");
+		return -1;
+	}
 	printf("sent connect request.\n");
 
 	if ((recv_size = recvfrom(sockfd, &cres, sizeof (struct connect_req), 0, res->ai_addr, &(res->ai_addrlen))) < 1)
-		err("error receiving UDP connect response");
+	{
+		perror("error receiving UDP connect response");
+		return -1;
+	}
 	printf("received connect response.\n");
 
 	if (recv_size != 16)
-		err("invalid response from UDP tracker");
+		perror("invalid response from UDP tracker");
 
 	if (creq.transaction_id != cres.transaction_id)
-		err("UDP tracker sent unexpected transaction value. exiting...");
+		perror("UDP tracker sent unexpected transaction value. exiting...");
 
 	if (cres.action != 0)
-		err("UDP tracker sent unexpected action. exiting...");
+		perror("UDP tracker sent unexpected action. exiting...");
 
 	srand(time(NULL));
 	areq = (struct announce_req) {
@@ -133,15 +149,15 @@ int udp_announce(unsigned char *info_hash, struct announce_res *ares, struct sta
 	memcpy(areq.peer_id,PEER_ID,20);
 	
 	if (sendto(sockfd, &areq, sizeof(struct announce_req), 0, res->ai_addr, res->ai_addrlen) == -1)
-		err("error sending UDP announce message");
+		perror("error sending UDP announce message");
 	printf("sent announce message.\n");
 
 	if ((recv_size = recvfrom(sockfd, response, MAX_RECV, 0, res->ai_addr, &(res->ai_addrlen))) < 1)
-		err("error receiving UDP announce response");
+		perror("error receiving UDP announce response");
 	printf("received announce response\n");
 	
 	if (recv_size < 20)
-		err("UDP announce response is under 20 bytes!");
+		perror("UDP announce response is under 20 bytes!");
 
 	memcpy(&action, response, 4);
 	memcpy(&transaction_id, response+4, 4);
@@ -150,14 +166,14 @@ int udp_announce(unsigned char *info_hash, struct announce_res *ares, struct sta
 	{
 		printf("sent transaction id    : %lx\n", areq.transaction_id);
 		printf("received transaction id: %lx\n", transaction_id);
-		err("UDP tracker sent unexpected transaction value. exiting...");
+		perror("UDP tracker sent unexpected transaction value. exiting...");
 	}
 
 	if (ntohl(action) != 1)
 	{
 		printf("tracker sent action %lx: ", action);
 		printf("%s\n", response+8);
-		err("UDP tracker sent unexpected action");
+		perror("UDP tracker sent unexpected action");
 	}
 
 	ares->interval   = ntohl(*(long *)(response+8));
@@ -186,11 +202,11 @@ void announce(unsigned char *info_hash, struct announce_res *ares, struct state 
 		strcpy(tracker_url, announce_list[i]);
 
 		if (sscanf(tracker_url, "%*[^:]://%[^:,/]", hostname) != 1)
-			err("url hostname pattern match failed");
+			perror("url hostname pattern match failed");
 		printf("hostname is %s\n", hostname);
 
 		if (sscanf(tracker_url, "%[^:]:", proto) != 1)
-			err("url protocol pattern match failed");
+			perror("url protocol pattern match failed");
 		printf("protocol is %s\n", proto);
 
 		if (sscanf(tracker_url, "%*[^:]://%*[^:]:%[0-9]", port) != 1)
@@ -198,12 +214,12 @@ void announce(unsigned char *info_hash, struct announce_res *ares, struct state 
 			if (strcmp(proto, "http") == 0)
 				strcpy(port, "80");
 			else
-				err("url port pattern match failed");
+				perror("url port pattern match failed");
 		}
 		printf("port is %s\n", port);
 
 		if (sscanf(tracker_url, "%*[^:]://%*[^/]/%[^?]?", path) != 1)
-			err("url path is messed up? no ...../announce<-");
+			perror("url path is messed up? no ...../announce<-");
 		printf("path is %s\n", path);
 
 		memset(&hints, 0,  sizeof(hints));
@@ -224,7 +240,7 @@ void announce(unsigned char *info_hash, struct announce_res *ares, struct state 
 			}
 
 		if (resp == NULL)
-			err("trackers are not available");
+			perror("trackers are not available");
 
 		if (!strcmp(proto, "udp"))
 		{
@@ -237,12 +253,12 @@ void announce(unsigned char *info_hash, struct announce_res *ares, struct state 
 			printf("trying http tracker...\n");
 
 			if (connect(sockfd, res->ai_addr, res->ai_addrlen) == -1)
-				err("can't connect to tracker.");
+				perror("can't connect to tracker.");
 
 			if (http_announce(info_hash, ares, state, hostname, path, port, sockfd) == 0)
 				break;
 		}
-		else err("invalid protocol");
+		else perror("invalid protocol");
 	}
 	
 	freeaddrinfo(res);

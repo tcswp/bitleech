@@ -2,7 +2,7 @@
 
 int main(int argc, char **argv)
 {
-	struct metainfo metainfo;
+	struct metainfo metainfo = {0};
 	struct announce_res ares = {0};
 	struct state state;
 	char *name = argv[1];
@@ -10,7 +10,7 @@ int main(int argc, char **argv)
 	printf("NanoBT 1.0\nAuthor: Cheeve\n\n");
 
 	read_torrent_file(&metainfo, name);
-	
+		
 	// need to fetch these values from a save file
 	state = (struct state)
 	{

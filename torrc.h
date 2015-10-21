@@ -18,6 +18,7 @@
 #include <fcntl.h>			// O_NONBLOCK
 #include <poll.h>
 #include <stdbool.h>
+#include <assert.h>
 
 #include "metainfo.h"
 #include "file.h"

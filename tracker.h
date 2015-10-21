@@ -3,20 +3,15 @@
 #define COMPACT		1
 #define MAX_RECV	0x100000
 
+#define QUEUE_LEN	20
+
 struct state;
 
 struct request
 {
-	int piece;
-	struct request *next;
-	struct request *prev;
-};
-
-struct queue
-{
-	int				size;
-	struct request 	*front;
-	struct request	*back;
+	int index;
+	int blocks_downloaded;
+	unsigned char *piece;
 };
 
 struct peer
@@ -29,21 +24,20 @@ struct peer
 	int				sock;
 	bool			sent_hs;
 	time_t			send_time;
-	bool			ready;
-	int				downloaded;
+	bool			recvd_bitfield;
+	int				pieces_downloaded;
 	bool			sent_req;
 	
-	struct queue	queue;
+	struct request  request[QUEUE_LEN];
+	int				q_size;
+	
+	int				timeouts;
 	
 	unsigned char  	*bitfield;
 	bool			recvd_choke;
 	bool			sent_choke;
 	bool			recvd_interested;
 	bool			sent_interested;
-	
-	int				piece_offset;
-	unsigned char 	*curr_piece;
-	int				block_len;
 	
 	char peer_id[20];
 };
@@ -89,7 +83,6 @@ struct announce_res
 	int			peer_num;
 };
 
-void err(char *msg);
 void encode_url(char *enc_str, char *str, int len);
 int http_announce(unsigned char *info_hash, struct announce_res *ares, struct state *state, char *hostname, char *path, char *port, int sockfd);
 // inline long long htonll(long long h);

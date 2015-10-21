@@ -25,55 +25,9 @@ void ntohmsg(struct msg *msg, unsigned char *stream)
 	}
 }
 // this should be inline
-int piece_length(struct metainfo *metainfo, int index){return ((index==metainfo->num_pieces-1)?metainfo->last_piece_length:metainfo->piece_length);};
-
-void enqueue(struct queue *q, int piece)
+int piece_length(struct metainfo *metainfo, int index)
 {
-	struct request *req;
-	req = malloc(sizeof (struct request));
-	req->piece = piece;
-	req->next = NULL;
-	
-	if (q->front == NULL)
-	{
-		q->front = req;
-		req->prev = NULL;
-	}
-	else
-	{
-		q->back->next = req;
-		req->prev = q->back;
-	}
-	
-	q->back = req;
-	
-	q->size++;
-}
-
-int pop(struct queue *q)
-{
-	int piece;
-	
-	if (q->front == NULL)
-		return -1;
-	
-	piece = q->front->piece;
-	
-	if (q->front == q->back)
-	{
-		free(q->front);
-		q->front = q->back = NULL;
-	}
-	else
-	{
-		q->front = q->front->next;
-		free(q->front->prev);
-		q->front->prev = NULL;
-	}
-	
-	q->size--;
-	
-	return piece;
+	return ((index==metainfo->num_pieces-1)?metainfo->last_piece_length:metainfo->piece_length);	
 }
 
 int rarest_first(struct peer *peer, struct state *state, int p, int num_pieces)
@@ -143,15 +97,24 @@ int parse_msgs(struct peer *peer, int peer_num, struct state *state, struct meta
 			peer[i].sent_choke	= false;
 			peer[i].recvd_interested = false;
 			peer[i].sent_interested = false;
-			peer[i].ready = false;
+			peer[i].recvd_bitfield = false;
 			peer[i].sent_req = false;
-			peer[i].downloaded = 0;
+			peer[i].pieces_downloaded = 0;
+			peer[i].timeouts	= 0;
 			
-			peer[i].curr_piece	= calloc(metainfo->piece_length, sizeof (unsigned char));
-			peer[i].piece_offset = 0;
-			peer[i].block_len = 0;
+			if (metainfo->piece_length/BLOCK_LEN>QUEUE_LEN)
+				peer[i].q_size = metainfo->piece_length/BLOCK_LEN;
+			else
+				peer[i].q_size = QUEUE_LEN*BLOCK_LEN/metainfo->piece_length;
 			
-			memset(&peer[i].queue, 0, sizeof (struct queue));
+			// allocate space for the max number of reqs
+			for (j = 0; j < peer[i].q_size; j++)
+			{
+				peer[i].request[j].piece = malloc(metainfo->piece_length);
+				peer[i].request[j].blocks_downloaded = 0;
+			}
+			
+			peer[i].q_size = 0;
 		}
 		else
 		{
@@ -179,9 +142,7 @@ int parse_msgs(struct peer *peer, int peer_num, struct state *state, struct meta
 					printf("piece %x is in the pending requests\n", j);
 				}
 			}
-			for (j=0;j<peer_num;j++)
-				if (peer[j].queue.front != NULL)
-					printf("peer %d has piece %x in the queue\n", j, peer[j].queue.front->piece);
+
 			printf("got %d/%d\n", state->got, metainfo->num_pieces);
 			printf("requested %d/%d\n", state->requested, metainfo->num_pieces);
 			printf("%d/%d choked peers\n", state->num_choked, state->num_connected);
@@ -189,9 +150,7 @@ int parse_msgs(struct peer *peer, int peer_num, struct state *state, struct meta
 		else
 		{
 			ntohmsg(&msg, peer[i].recv_buffer+msg_offset);
-			//id = (unsigned char *) peer[i].recv_buffer+msg_offset+4;
-
-			switch (msg.id /* *id */)
+			switch (msg.id)
 			{
 				case 0: 
 					//printf("choke\n");
@@ -215,48 +174,55 @@ int parse_msgs(struct peer *peer, int peer_num, struct state *state, struct meta
 					
 					for (j = 0; j < metainfo->num_pieces; j++)
 						state->piece_freq[j] += get_bit(peer[i].bitfield, j);
-					peer[i].ready = true;
+					peer[i].recvd_bitfield = true;
 					break;    
 				case 6: printf("request\n"); break;
 				case 7:
 					//printf("piece\n");
-// 					length = ntohl(*(long *)(id-4))-9;
-// 					index = ntohl(*(long *)(id+1));
-// 					begin = ntohl(*(long *)(id+5));
+					for (j = 0; j < peer[i].q_size; j++)
+						if (peer[i].request[j].index == msg.piece.index)
+							break;
 					
-					if (msg.piece.index != peer[i].queue.front->piece || get_bit(state->have, msg.piece.index))
+					if (peer[i].request[j].index != msg.piece.index || get_bit(state->have, msg.piece.index))
 					{
 						break;
 					}
+						
+					memcpy(peer[i].request[j].piece+msg.piece.begin, msg.piece.block, msg.length-9);
+					peer[i].request[j].blocks_downloaded++;
 					
-					memcpy(peer[i].curr_piece+msg.piece.begin, msg.piece.block, msg.length-9);
-					
-					if (msg.piece.begin+(msg.length-9) == piece_length(metainfo, msg.piece.index))
+					//if (msg.piece.begin+(msg.length-9) == piece_length(metainfo, msg.piece.index))
+					if ((peer[i].request[j].blocks_downloaded-1)*BLOCK_LEN+(msg.length-9) == piece_length(metainfo, msg.piece.index))
 					{
 						set_bit(state->pending_reqs, msg.piece.index);
 						
-						if (check_hash(peer[i].curr_piece, msg.piece.index, metainfo))
+						if (check_hash(peer[i].request[j].piece, msg.piece.index, metainfo))
 						{
 							state->got++;
-							LOG("downloaded piece %x from peer %d", msg.piece.index, i);
+							printf("downloaded piece %x from peer %d\n", msg.piece.index, i);
 							printf("%.02f%%\b\b\b\b\b\b\b", ((float)state->got*100)/metainfo->num_pieces);
+							
+							printf("got %d/%d\n", state->got, metainfo->num_pieces);
+							printf("requested %d/%d\n", state->requested, metainfo->num_pieces);
+							
 							fflush(stdout);
 							set_bit(state->have, msg.piece.index);
-							peer[i].downloaded++;
-							if (state->endmode)
-							{
-								for (j = 0; j < peer_num; j++)
-								{
-									pop(&peer[j].queue);
-									// also send out cancels
-								}
-							}
-							else
-							{
-								pop(&peer[i].queue);
-							}
+							peer[i].pieces_downloaded++;
+
+// 							if (state->endmode)
+// 							{
+// 								for (j = 0; j < peer_num; j++)
+// 								{
+// 									pop(&peer[j].queue);
+// 									// also send out cancels
+// 								}
+// 							}
+// 							else
+// 							{
+// 								pop(&peer[i].queue);
+// 							}
 							
-							//write_to_file(peer[i].curr_piece, index, piece_length(metainfo, index));
+							write_to_file(metainfo, peer[i].request[j].piece, msg.piece.index);
 							
 // 							msg.length = htonl(5);
 // 							msg.id = HAVE;
@@ -264,22 +230,22 @@ int parse_msgs(struct peer *peer, int peer_num, struct state *state, struct meta
 // 							
 // 							for (p = 0; p < peer_num; p++)
 // 								send(peer[p].sock, &msg, 9, 0);
-
-// 							index = rarest_first(peer, state, i, metainfo->num_pieces);
-// 							if (index == -1)
-// 								break;
-// 							enqueue(&peer[i].queue, index);
-// 							set_bit(state->pending_reqs, index, 1);
 							
 						}
 						else
 						{
-							printf("piece did not match hash!\n");
+							printf("piece %x did not match hash!\n", msg.piece.index);
 							break;
 						}
+						peer[i].request[j].blocks_downloaded = 0;
 					}
 					
-					peer[i].sent_req = false;
+					if (peer[i].pieces_downloaded == peer[i].q_size)
+					{
+						peer[i].sent_req = false;
+						peer[i].pieces_downloaded = 0;
+						peer[i].q_size = 0;
+					}
 					
 					break; 
 				case 8: printf("cancel\n"); break;
@@ -296,16 +262,58 @@ int parse_msgs(struct peer *peer, int peer_num, struct state *state, struct meta
 	return 0;
 }
 
+inline void request_piece(struct metainfo *metainfo, struct state *state, int index, int sockfd)
+{
+	int block_len = BLOCK_LEN;
+	int piece_offset = 0;
+	
+	struct msg msg;
+	
+	int i;
+	
+	for (i = 0; i < ceil((float)piece_length(metainfo, index)/BLOCK_LEN); i++)
+	{
+		if (index == metainfo->num_pieces-1)
+			block_len = (metainfo->last_piece_length < BLOCK_LEN) ? metainfo->last_piece_length : BLOCK_LEN;
+		
+		msg.length			= htonl(13);
+		msg.id				= REQUEST;
+		msg.request.index	= htonl(index);
+		msg.request.begin	= htonl(piece_offset);
+		msg.request.length	= htonl(block_len);
+		
+		if (send(sockfd, &msg, 17, 0) == -1)
+		{
+			perror("send");
+		}
+		if (piece_offset == 0)
+		{
+			if (!get_bit(state->requests, index))
+			{
+				state->requested++;
+				set_bit(state->requests, index);
+			}
+		}
+		
+		piece_offset += block_len;
+		if (index == metainfo->num_pieces-1)
+		{
+			if ((piece_offset+block_len) > metainfo->last_piece_length)
+				block_len = metainfo->last_piece_length-piece_offset;
+		}
+		else if ((piece_offset+block_len) > metainfo->piece_length)
+			block_len = metainfo->piece_length-piece_offset;
+	}
+}
+
 void start_pwp(struct peer *peer, int peer_num, struct state *state, struct metainfo *metainfo)
 {
-	int i, j, sockfd;
+	int i, j, k, sockfd;
 	struct sockaddr_in peer_addr;
 	struct pollfd peer_fds[MAX_PEERS];
 	
 	struct handshake hs;
 	struct msg msg;
-	
-	struct request *preq;
 	
 	int index, flags;
 			
@@ -335,7 +343,7 @@ void start_pwp(struct peer *peer, int peer_num, struct state *state, struct meta
 		connect(sockfd, (struct sockaddr *) &peer_addr, sizeof (peer_addr));
 				
 		peer[i].connected	= false;
-		peer[i].sock			= sockfd;
+		peer[i].sock		= sockfd;
 		
 		peer_fds[i].fd 		= sockfd;
 		peer_fds[i].events	= POLLOUT | POLLIN;
@@ -383,8 +391,8 @@ void start_pwp(struct peer *peer, int peer_num, struct state *state, struct meta
 			if (!peer[i].sent_hs && peer_fds[i].revents & POLLOUT)
 			{
 				peer[i].recv_buffer	= malloc(100000);
-				peer[i].recv_len		= 0;
-				peer[i].sent_hs 		= true;
+				peer[i].recv_len	= 0;
+				peer[i].sent_hs 	= true;
 				peer[i].connected 	= false;
 
 				send(peer_fds[i].fd, &hs, sizeof(hs), 0);
@@ -394,96 +402,57 @@ void start_pwp(struct peer *peer, int peer_num, struct state *state, struct meta
 			if (peer[i].sent_choke && !state->endmode)
 				continue;
 			
-			if (peer[i].connected && !state->endmode && peer[i].sent_req && peer[i].send_time+5 < time(NULL))
+			if (peer[i].connected && !state->endmode && (peer[i].sent_req||peer[i].sent_interested) && peer[i].send_time+PEER_TIMEOUT < time(NULL))
 			{
-				while (peer[i].queue.front != NULL)
+				for (j = 0; j < peer[i].q_size; j++)
+					set_bit(state->pending_reqs, peer[i].request[j].index);
+				
+				if (peer[i].timeouts >= MAX_TIMEOUT)
 				{
-					//printf("peer %d timed out on piece %x...\n", i, peer[i].queue.front->piece);
-					set_bit(state->pending_reqs, peer[i].queue.front->piece);
-					//printf("removed piece %x from the pending requests\n", peer[i].queue.front->piece);
-					pop(&peer[i].queue);
+					printf("peer %d timed out\n", i);			
+					peer[i].q_size = 0;
+					peer[i].sent_choke = true;
+					state->num_choked++;
+					continue;
 				}
-		
-				peer[i].sent_choke = true;
-				state->num_choked++;
-				continue;
+				else
+				{
+					peer[i].pieces_downloaded = 0;
+					peer[i].q_size = 0;
+					peer[i].sent_req = false;
+					peer[i].timeouts++;
+				}
 			}
 			
-			if (peer[i].ready)
+			if (peer[i].recvd_bitfield)
 			{
-				if (!state->endmode)
+				if (peer[i].recvd_choke && !peer[i].sent_interested)
 				{
-					if (peer[i].queue.front == NULL)
-					{
-						for (j = 0; j < QUEUE_LEN*BLOCK_LEN/metainfo->piece_length; j++)
-						{
-							index = rarest_first(peer, state, i, metainfo->num_pieces);
-							if (index == -1)
-								break;
-							//printf("assigned piece %x to peer %d\n", index, i);
-							enqueue(&peer[i].queue, index);
-							set_bit(state->pending_reqs, index);
-						}
-					}
-					
-					if (peer[i].recvd_choke && peer[i].sent_interested && peer[i].send_time+5 < time(NULL))
-					{
-						peer[i].sent_choke = true;
-						set_bit(state->pending_reqs, peer[i].queue.front->piece);
-						pop(&peer[i].queue);
-					}
-				
-					if (peer[i].recvd_choke && !peer[i].sent_interested)
-					{
-						msg.length	= htonl(1);
-						msg.id		= INTERESTED;
-						send(peer_fds[i].fd, &msg, 5, 0);
-						peer[i].sent_interested = true;
-						peer[i].send_time = time(NULL);
-					}
+					msg.length	= htonl(1);
+					msg.id		= INTERESTED;
+					send(peer_fds[i].fd, &msg, 5, 0);
+					peer[i].sent_interested = true;
+					peer[i].send_time = time(NULL);
 				}
 				
-				if (!peer[i].recvd_choke && !peer[i].sent_req && peer[i].queue.front != NULL)
+				if (!peer[i].recvd_choke && !peer[i].sent_req)
 				{
-					for (preq = peer[i].queue.front; preq != NULL; preq = preq->next)
+					for (j = 0; j < QUEUE_LEN*BLOCK_LEN/metainfo->piece_length; j++)
 					{
-						if (peer[i].block_len != BLOCK_LEN) //last request was for last block in a piece
+						index = rarest_first(peer, state, i, metainfo->num_pieces);
+						if (index == -1)
 						{
-							memset(peer[i].curr_piece, 0, metainfo->piece_length);
-							peer[i].piece_offset = 0;
-							
-							if (preq->piece == metainfo->num_pieces-1)
-								peer[i].block_len = (metainfo->last_piece_length < BLOCK_LEN) ? metainfo->last_piece_length : BLOCK_LEN;
-							else
-								peer[i].block_len = BLOCK_LEN;
+							break;
 						}
+
+						printf("assigned piece %x to peer %d\n", index, i);
+						peer[i].request[j].index = index;
+						set_bit(state->pending_reqs, index);
+						peer[i].q_size++;
 						
-						msg.length			= htonl(13);
-						msg.id				= REQUEST;
-						msg.request.index	= htonl(preq->piece);
-						msg.request.begin	= htonl(peer[i].piece_offset);
-						msg.request.length	= htonl(peer[i].block_len);
-						
-						if (send(peer_fds[i].fd, &msg, 17, 0) != 17)
-							printf("send did not take entire message!\n");
-						if (peer[i].piece_offset == 0)
-						{
-							LOG("peer %d downloading piece %x", i, preq->piece);
-							if (!get_bit(state->requests, preq->piece))
-							{
-								state->requested++;
-								set_bit(state->requests, preq->piece);
-							}
-						}
-						
-						peer[i].piece_offset += peer[i].block_len;
-						if (preq->piece == metainfo->num_pieces-1)
-						{
-							if ((peer[i].piece_offset+peer[i].block_len) > metainfo->last_piece_length)
-								peer[i].block_len = metainfo->last_piece_length-peer[i].piece_offset;
-						}
-						else if ((peer[i].piece_offset+peer[i].block_len) > metainfo->piece_length)
-							peer[i].block_len = metainfo->piece_length-peer[i].piece_offset;
+						printf("downloading piece %x from peer %d\n", index, i);
+						request_piece(metainfo, state, index, peer_fds[i].fd);
+
 					}
 					peer[i].send_time = time(NULL);
 					peer[i].sent_req	 = true;
