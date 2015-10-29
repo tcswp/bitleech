@@ -27,6 +27,7 @@ void set_metainfo(void *strct, const char *key, void *value, int len)
 		memcpy(metainfo->pieces, (unsigned char *)value, len);
 		metainfo->num_pieces = len/20;
 		metainfo->last_piece_length = metainfo->length-((metainfo->num_pieces-1)*metainfo->piece_length);
+		metainfo->last_block_length = metainfo->last_piece_length % BLOCK_LEN;
 	}
 	else if (!strcmp(key,"name"))
 		strcpy(metainfo->name, (char *) value);

@@ -1,46 +1,12 @@
-#define PEER_ID		"-nanoBT-ABCDEFGHIJKL"
+#define PEER_ID		"-nanoBT-ABCDEFGHIJKZ"
 #define PORT		12345
 #define COMPACT		1
 #define MAX_RECV	0x100000
 
-#define QUEUE_LEN	20
+#define QUEUE_LEN	10
 
 struct state;
-
-struct request
-{
-	int index;
-	int blocks_downloaded;
-	unsigned char *piece;
-};
-
-struct peer
-{
-	unsigned int 	ip;
-	unsigned short 	port;
-	bool 			connected;
-	unsigned char 	*recv_buffer;
-	int 			recv_len;
-	int				sock;
-	bool			sent_hs;
-	time_t			send_time;
-	bool			recvd_bitfield;
-	int				pieces_downloaded;
-	bool			sent_req;
-	
-	struct request  request[QUEUE_LEN];
-	int				q_size;
-	
-	int				timeouts;
-	
-	unsigned char  	*bitfield;
-	bool			recvd_choke;
-	bool			sent_choke;
-	bool			recvd_interested;
-	bool			sent_interested;
-	
-	char peer_id[20];
-};
+struct peer;
 
 struct connect_req
 {

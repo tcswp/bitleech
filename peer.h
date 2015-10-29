@@ -1,14 +1,44 @@
 #define PSTR		"BitTorrent protocol"
 #define BLOCK_LEN	0x4000
-#define PEER_TIMEOUT 10
+#define PEER_TIMEOUT 30
 #define MAX_TIMEOUT 5
+
+#define RECV_MAX	3000
 
 typedef enum
 {
-	CHOKE, UNCHOKE, INTERESTED, NOT_INTERESTED,
-	HAVE, BITFIELD, REQUEST, PIECE, CANCEL
+	CHOKE, UNCHOKE,
+	INTERESTED, NOT_INTERESTED,
+	HAVE, BITFIELD,
+	REQUEST, PIECE,
+	CANCEL, PORT
 } type;
 
+
+
+struct queue;
+
+struct peer
+{
+	unsigned int 	ip;
+	unsigned short 	port;
+	char 			peer_id[20];
+	time_t			send_time;
+	int				pieces_downloaded;
+	int				blocks_downloaded;
+	int				timeouts;
+	struct queue	queue;
+	unsigned char  	*bitfield;
+	
+	bool			am_choking;
+	bool			peer_choking;
+	bool			peer_interested;
+	bool			am_interested;
+	bool 			connected;
+	bool			sent_hs;
+	bool			recvd_bitfield;
+	bool			sent_req;
+};
 
 struct state
 {
@@ -20,7 +50,7 @@ struct state
 	int	got;
 	int	num_choked;
 	int	num_connected;
-	bool endmode;
+	bool endgame_mode;
 	
 	int	uploaded;
 	int	downloaded;

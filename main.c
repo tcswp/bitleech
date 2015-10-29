@@ -4,21 +4,14 @@ int main(int argc, char **argv)
 {
 	struct metainfo metainfo = {0};
 	struct announce_res ares = {0};
-	struct state state;
+	struct state state = {0};
 	char *name = argv[1];
 
 	printf("NanoBT 1.0\nAuthor: Cheeve\n\n");
 
 	read_torrent_file(&metainfo, name);
-		
-	// need to fetch these values from a save file
-	state = (struct state)
-	{
-		.uploaded = 0, 
-		.downloaded = 0,
-		.left  =  metainfo.num_pieces,
-		.event = "started"
-	};
+	
+	init_state(&state, metainfo.num_pieces);
 	
 	do
 	{

@@ -25,9 +25,10 @@
 #include "bdecode.h"
 #include "tracker.h"
 #include "peer.h"
+#include "queue.h"
 
-#ifdef DEBUG
-#define LOG(msg, ...)	fprintf(stderr, "%s:%d: " msg "\n", __FILE__, __LINE__, ##__VA_ARGS__);
+#ifdef DBG
+#define DEBUG(msg, ...)	fprintf(stderr, "%s:%d: " msg "\n", __FILE__, __LINE__, ##__VA_ARGS__);
 #else
-#define LOG(msg, ...)
+#define DEBUG(msg, ...)
 #endif

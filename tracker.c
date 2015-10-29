@@ -29,6 +29,7 @@ int decode_peers(struct announce_res *ares, unsigned char *block, int len)
 	num_peers = (len/6>MAX_PEERS)?MAX_PEERS:len/6;
 	for (i = 0; i < num_peers; i++)
 	{
+		ares->peer[i].connected = false;
 		ares->peer[i].ip   = ntohl(*(long *)(block+i*6));
 		ares->peer[i].port = ntohs(*(short *)(block+i*6+4));
 	}
