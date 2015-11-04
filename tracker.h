@@ -5,6 +5,8 @@
 
 #define QUEUE_LEN	10
 
+#define MIN(a,b)	((a)<(b)?(a):(b))
+
 struct state;
 struct peer;
 
@@ -42,10 +44,10 @@ struct announce_req
 struct announce_res
 {
 	int			interval;
-	char		tracker_id[256];
+	char		*tracker_id;
 	int			complete;
 	int			incomplete;
-	struct peer peer[MAX_PEERS];
+	struct peer *peer;
 	int			peer_num;
 };
 
@@ -53,5 +55,5 @@ void encode_url(char *enc_str, char *str, int len);
 int http_announce(unsigned char *info_hash, struct announce_res *ares, struct state *state, char *hostname, char *path, char *port, int sockfd);
 // inline long long htonll(long long h);
 int udp_announce(unsigned char *info_hash, struct announce_res *ares, struct state *state, char *hostname, char *path, char *port, struct addrinfo *res, int sockfd);
-void announce(unsigned char *info_hash, struct announce_res *ares, struct state *state, char (*announce_list)[256]);
-int decode_peers(struct announce_res *ares, unsigned char *block, int len);
+void announce(unsigned char *info_hash, struct announce_res *ares, struct state *state, char **announce_list);
+struct peer *decode_peers(unsigned char *block, int len);

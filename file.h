@@ -1,2 +1,2 @@
-void read_torrent_file(struct metainfo *metainfo, char *filename);
-void write_to_file(struct metainfo *metainfo, unsigned char *piece, int index);
+struct metainfo parse_torrent_file(char *filename);
+void write_to_file(unsigned char *piece, int index);

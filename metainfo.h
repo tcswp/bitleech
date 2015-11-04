@@ -4,30 +4,33 @@
 #define MAX_MSG		5000
 #define MAX_PEERS	60
 
+#define piece_len(index)		(index==metainfo.num_pieces-1)?metainfo.last_piece_length:metainfo.piece_length
+#define check_hash(piece,index) !memcmp(SHA1(piece,piece_len(index),NULL),metainfo.pieces+20*index,20)
+
 struct file
 {
   unsigned long length;
-  char 			path[FILENAME_MAX];
+  char 			*path;
 };
 
 struct metainfo
 {
-  char 			announce_list[256][256];
+  char 			**announce_list;
   int			announce_num;
   int 			piece_length;
   int			last_piece_length;
-  unsigned char pieces[MAX_PIECES*20];
+  int			last_block_length;
+  unsigned char *pieces;
   int			num_pieces;
   unsigned char info_hash[20];
+  
+  // bencoding offsets for calculating info hash
   int 			info_begin;
   int 			info_end;
-  bool			multi_file_mode;
-  char 			name[FILENAME_MAX];
+  
+  char 			*name;
   int			length;
-  struct file   file[256];
+  bool			multi_file_mode;
+  struct file   *file;
   int			file_num;
 };
-
-void set_metainfo(void *strct, const char *key, void *value, int len);
-void set_ares(void *strct, const char *key, void *value, int len);
-int check_hash(unsigned char *piece, int index, struct metainfo *metainfo);

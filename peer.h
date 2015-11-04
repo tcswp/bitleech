@@ -12,7 +12,20 @@ typedef enum
 	HAVE, BITFIELD,
 	REQUEST, PIECE,
 	CANCEL, PORT
-} type;
+} t_msg_id;
+
+typedef enum
+{
+	AM_CHOKING 		= 1,
+	PEER_CHOKING 	= 2,
+	PEER_INTERESTED = 4,
+	AM_INTERESTED	= 8,
+	CONNECTED 		= 16,
+	SENT_HS 		= 32,
+	RECVD_BITFIELD 	= 64,
+	SENT_REQ 		= 128,
+	ENDGAME_MODE	= 256
+} t_peer_flags;
 
 
 
@@ -30,19 +43,12 @@ struct peer
 	struct queue	queue;
 	unsigned char  	*bitfield;
 	
-	bool			am_choking;
-	bool			peer_choking;
-	bool			peer_interested;
-	bool			am_interested;
-	bool 			connected;
-	bool			sent_hs;
-	bool			recvd_bitfield;
-	bool			sent_req;
+	t_peer_flags	flags;
 };
 
 struct state
 {
-	int *piece_freq;
+	unsigned char *piece_freq;
 	unsigned char *have;
 	unsigned char *pending_reqs;
 	unsigned char *requests;
@@ -50,7 +56,6 @@ struct state
 	int	got;
 	int	num_choked;
 	int	num_connected;
-	bool endgame_mode;
 	
 	int	uploaded;
 	int	downloaded;
@@ -96,7 +101,4 @@ struct msg
 	
 } __attribute__((packed));
 
-struct metainfo;
-
-int piece_length(struct metainfo *metainfo, int index);
-void start_pwp(struct peer *peer, int peer_num, struct state *state, struct metainfo *metainfo);
+void start_pwp(struct peer *peer, int peer_num, struct state *state);

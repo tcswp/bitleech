@@ -1,11 +1,16 @@
 #include "torrc.h"
 
-void read_torrent_file(struct metainfo *metainfo, char *filename)
+extern struct metainfo metainfo;
+
+struct metainfo parse_torrent_file(char *filename)
 {
 	FILE *fp;
 	int i, filesize;
 	char benc[MAX_FILE];
 	char c;
+	
+	struct metainfo new_metainfo;
+	
 	unsigned int info_size;
 	unsigned char sha1_hash[20];
 
@@ -30,57 +35,35 @@ void read_torrent_file(struct metainfo *metainfo, char *filename)
 		exit(1);
 	}
 	
-	parse_dict(&set_metainfo, metainfo, benc);
-	
-	if (!access(metainfo->name, F_OK))
-	{
-		do
-		{
-			printf("\"%s\" already exists. overwrite? [y/n]\n", metainfo->name);
-			c = getchar();
-		}
-		while (!(c == 'y' || c == 'n'));
-		if (c == 'n') exit(0);
-	}
-	
-	if (metainfo->multi_file_mode)
-	{
-		mkdir(metainfo->name, 0777);
-		if (chdir(metainfo->name) == -1)
-			err("chdir\n");
-		for (i = 0; i < metainfo->file_num; i++)
-			fopen(metainfo->file[i].path, "w");
-	}
-	else
-		fopen(metainfo->name, "w");
+	parse_dict(&set_metainfo, &new_metainfo, benc);
 		
-	//printf("info: %.*s\n\n\n\n", metainfo->info_end-metainfo->info_begin,benc+metainfo->info_begin);
+	//printf("info: %.*s\n\n\n\n", metainfo.info_end-metainfo.info_begin,benc+metainfo.info_begin);
 	
-	// add code to check if info_hash is already in the metainfo file and calculate below only if not.
-
-	info_size = metainfo->info_end-metainfo->info_begin;
-	SHA1((unsigned char *)benc+metainfo->info_begin, info_size, sha1_hash);
-	memcpy(metainfo->info_hash, sha1_hash, 20);
+	info_size = metainfo.info_end-metainfo.info_begin;
+	SHA1((unsigned char *)benc+metainfo.info_begin, info_size, sha1_hash);
+	memcpy(metainfo.info_hash, sha1_hash, 20);
 	
 	fclose(fp);
+	
+	return new_metainfo;
 }
 
-void write_to_file(struct metainfo *metainfo, unsigned char *piece, int index)
+void write_to_file(unsigned char *piece, int index)
 {
 	FILE *fp, *fp1, *fp2;
 	unsigned long flen;
 	int i;
 	
-	int begin = index*metainfo->piece_length;
+	int begin = index*metainfo.piece_length;
 	int length = piece_length(metainfo, index);
 	
 	unsigned char p1[length];
 	unsigned char p2[length];
 	int p1len, p2len;
 
-	if (!metainfo->multi_file_mode)
+	if (!metainfo.multi_file_mode)
 	{
-		fp = fopen(metainfo->name, "r+b");
+		fp = fopen(metainfo.name, "r+b");
 		fseek(fp, begin, SEEK_SET);
 		fwrite(piece, sizeof (char), length, fp);
 		fclose(fp);
@@ -88,15 +71,15 @@ void write_to_file(struct metainfo *metainfo, unsigned char *piece, int index)
 	else
 	{
 		flen = 0;		
-		for (i = 0; i < metainfo->file_num; i++)
+		for (i = 0; i < metainfo.file_num; i++)
 		{
 			if (i > 1)
-				begin -= metainfo->file[i-1].length;
+				begin -= metainfo.file[i-1].length;
 			
-			flen += metainfo->file[i].length;
+			flen += metainfo.file[i].length;
 			if (begin < flen && begin+length <= flen) // piece fits nicely into file
 			{
-				fp = fopen(metainfo->file[i].path, "r+b");
+				fp = fopen(metainfo.file[i].path, "r+b");
 				fseek(fp, begin, SEEK_SET);
 				fwrite(piece, sizeof (char), length, fp);
 				fclose(fp);
@@ -108,14 +91,14 @@ void write_to_file(struct metainfo *metainfo, unsigned char *piece, int index)
 				
 				p1len = flen-begin;
 				memcpy(p1, piece, p1len);
-				fp1 = fopen(metainfo->file[i].path, "r+b");
+				fp1 = fopen(metainfo.file[i].path, "r+b");
 				fseek(fp1, begin, SEEK_SET);
 				fwrite(p1, sizeof (char), p1len, fp1);
 				fclose(fp1);
 				
 				p2len = (begin+length)-flen;
 				memcpy(p2, piece+p1len, p2len);
-				fp2 = fopen(metainfo->file[i+1].path, "r+b");
+				fp2 = fopen(metainfo.file[i+1].path, "r+b");
 				fseek(fp2, 0, SEEK_SET);
 				fwrite(p2, sizeof (char), p2len, fp2);
 				fclose(fp2);

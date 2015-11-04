@@ -3,38 +3,34 @@
 void encode_url(char* enc_str, char *str, int len)
 {
 	int i;
-	char c[2] = {0}, hex[10] = {0};
+	char fmt[8], encc[4];
 
 	for (i = 0; i < len; i++)
 	{
-		if (isdigit(str[i]) || isalpha(str[i])
-			 || str[i] == '.' || str[i] == '-'
-			 || str[i] == '_' || str[i] == '~')
-		{
-			sprintf(c, "%c", str[i]);
-			strcat(enc_str, c);
-		}
-		else
-		{
-			sprintf(hex, "%%%02hhx", str[i]);
-			strcat(enc_str, hex);
-		}
+		strcpy(fmt, (isdigit(str[i])||isalpha(str[i])||
+			str[i]=='.'||str[i]=='-'||str[i]=='_'||str[i]=='~')
+			?"%c":"%%%02hhx");
+
+		sprintf(encc, fmt, str[i]);
+		strcat(enc_str, encc);
 	}
 }
 
-int decode_peers(struct announce_res *ares, unsigned char *block, int len)
+struct peer *decode_peers(unsigned char *block, int len)
 {
 	int i, num_peers;
+	struct peer *peer;
 	
-	num_peers = (len/6>MAX_PEERS)?MAX_PEERS:len/6;
+	num_peers = MIN(len/6,MAX_PEERS);
+	peer = calloc(num_peers, sizeof(struct peer));
+	
 	for (i = 0; i < num_peers; i++)
 	{
-		ares->peer[i].connected = false;
-		ares->peer[i].ip   = ntohl(*(long *)(block+i*6));
-		ares->peer[i].port = ntohs(*(short *)(block+i*6+4));
+		peer[i].ip   = ntohl(*(long *)(block+i*6));
+		peer[i].port = ntohs(*(short *)(block+i*6+4));
 	}
 	
-	return num_peers;
+	return peer;
 }
 
 int http_announce(unsigned char *info_hash, struct announce_res *ares, struct state *state, char *hostname, char *path, char *port, int sockfd)
@@ -75,8 +71,8 @@ int http_announce(unsigned char *info_hash, struct announce_res *ares, struct st
 	return 0;
 }
 
-static inline long long htonll(long long h){return (long long) htonl(h)<<32|htonl(h>>32);}
-static inline long long ntohll(long long n){return (long long) ntohl(n)<<32|ntohl(n>>32);}
+#define htonll(n)	((long long)htonl(n)<<32|htonl((n)>>32)
+//static inline long long ntohll(long long n){return (long long) ntohl(n)<<32|ntohl(n>>32);}
 
 int udp_announce(unsigned char *info_hash, struct announce_res *ares, struct state *state, char *hostname, char *path, char *port, struct addrinfo *res, int sockfd)
 {
@@ -180,12 +176,13 @@ int udp_announce(unsigned char *info_hash, struct announce_res *ares, struct sta
 	ares->interval   = ntohl(*(long *)(response+8));
 	ares->complete   = ntohl(*(long *)(response+12));
 	ares->incomplete = ntohl(*(long *)(response+16));
-	ares->peer_num 	 = decode_peers(ares, response+20, recv_size-20);
+	ares->peer 	 	 = decode_peers(response+20, recv_size-20);
+	ares->peer_num	 = (recv_size-20)/6;
 	
 	return 0;
 }
 
-void announce(unsigned char *info_hash, struct announce_res *ares, struct state *state, char (*announce_list)[256])
+void announce(unsigned char *info_hash, struct announce_res *ares, struct state *state, char **announce_list)
 {
 	char tracker_url[MAX_STR];
 	char hostname[MAX_STR], proto[5], port[6], path[32];

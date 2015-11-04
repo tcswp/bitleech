@@ -20,7 +20,7 @@ struct req *get_req(struct queue *queue, index)
 	return NULL;
 }
 
-void insert_req(struct queue *queue, int index, int piece_length)
+struct req *insert_req(struct queue *queue, int index, int piece_length)
 {
 	struct req *new_req = malloc(sizeof (struct req));
 	
@@ -43,9 +43,39 @@ void insert_req(struct queue *queue, int index, int piece_length)
 	new_req->next = NULL;
 	queue->back = new_req;
 	queue->len++;
+	
+	return new_req;
 }
 
-int delete_req(struct queue *queue, int index)
+int pop_req(struct queue *queue)
+{
+	int index;
+	struct req *preq;
+	
+	if (queue->front == NULL)
+		index = -1;
+	else 
+	{
+		preq = queue->front;
+		index = preq->index;
+		
+		if (queue->front == queue->back)
+		{
+			queue->front = NULL;
+			queue->back  = NULL;
+		}
+		else
+		{
+			queue->front = preq->next;
+			queue->front->prev = NULL;
+		}
+		
+		free(preq);
+	}
+	return index;
+}
+
+/* int delete_req(struct queue *queue, int index)
 {
 	struct req *preq;
 	
@@ -57,6 +87,14 @@ int delete_req(struct queue *queue, int index)
 		free(queue->front);
 		queue->front = NULL;
 		queue->back  = NULL;
+		return 0;
+	}
+	
+	if (queue->front->index == index)
+	{
+		preq = queue->front->next;
+		free(queue->front);
+		queue->front = preq;
 		return 0;
 	}
 	
@@ -74,11 +112,21 @@ int delete_req(struct queue *queue, int index)
 	}
 	
 	return 0;
-}
+} */
 
 int is_empty(struct queue *queue)
 {
 	return (queue->front == NULL);
+}
+
+int get_len(struct queue *queue)
+{
+	return queue->len;
+}
+
+struct req *get_head(struct queue *queue)
+{
+	return queue->front;
 }
 
 struct req *get_tail(struct queue *queue)
