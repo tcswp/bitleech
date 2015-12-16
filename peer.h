@@ -1,9 +1,9 @@
 #define PSTR		"BitTorrent protocol"
 #define BLOCK_LEN	0x4000
-#define PEER_TIMEOUT 30
-#define MAX_TIMEOUT 5
+#define PEER_TIMEOUT 10
+#define MAX_TIMEOUT 3
 
-#define RECV_MAX	3000
+#define RECV_MAX	BLOCK_LEN+13
 
 typedef enum
 {
@@ -11,7 +11,7 @@ typedef enum
 	INTERESTED, NOT_INTERESTED,
 	HAVE, BITFIELD,
 	REQUEST, PIECE,
-	CANCEL, PORT
+	CANCEL//, PORT
 } t_msg_id;
 
 typedef enum
@@ -27,10 +27,6 @@ typedef enum
 	ENDGAME_MODE	= 256
 } t_peer_flags;
 
-
-
-struct queue;
-
 struct peer
 {
 	unsigned int 	ip;
@@ -39,8 +35,9 @@ struct peer
 	time_t			send_time;
 	int				pieces_downloaded;
 	int				blocks_downloaded;
+	int				requests_queued;
 	int				timeouts;
-	struct queue	queue;
+	struct queue	*queue;
 	unsigned char  	*bitfield;
 	
 	t_peer_flags	flags;
@@ -102,3 +99,4 @@ struct msg
 } __attribute__((packed));
 
 void start_pwp(struct peer *peer, int peer_num, struct state *state);
+void init_state(struct state *state);

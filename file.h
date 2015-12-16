@@ -1,2 +1,4 @@
 struct metainfo parse_torrent_file(char *filename);
-void write_to_file(unsigned char *piece, int index);
+void save_piece(unsigned char *piece, int index);
+void write_piece_to_file(char *path, unsigned char *piece, int length, int offset);
+int mkpath(char *path, mode_t mode);

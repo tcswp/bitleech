@@ -7,7 +7,7 @@ void init_queue(struct queue *queue)
 	queue->back  = NULL;
 }
 
-struct req *get_req(struct queue *queue, index)
+struct req *get_req(struct queue *queue, int index)
 {
 	struct req *preq;
 	
@@ -26,7 +26,7 @@ struct req *insert_req(struct queue *queue, int index, int piece_length)
 	
 	new_req->index = index;
 	new_req->blocks_downloaded = 0;
-	neq_req->blocks_queued = 0;
+	new_req->blocks_queued = 0;
 	new_req->piece = malloc(piece_length);
 	
 	if (queue->front == NULL)
@@ -37,7 +37,7 @@ struct req *insert_req(struct queue *queue, int index, int piece_length)
 	else
 	{
 		new_req->prev = queue->back;
-		queue->back->next = new_req
+		queue->back->next = new_req;
 	}
 	
 	new_req->next = NULL;

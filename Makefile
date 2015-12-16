@@ -1,8 +1,8 @@
 CC=gcc
 TARGET=test
-CFLAGS=-Wall -g
+CFLAGS=-Wall -ggdb -DDBG
 LDFLAGS=-lm -lssl -lcrypto
-OBJS=bdecode.o tracker.o metainfo.o file.o peer.o main.o
+OBJS=bdecode.o tracker.o queue.o file.o peer.o main.o
 
 default: $(TARGET)
 
@@ -11,7 +11,7 @@ $(TARGET): $(OBJS)
 
 bdecode.o: bdecode.c
 	$(CC) $(CFLAGS) -c bdecode.c
-tracker.o: tracker.c
+tracker.o: tracker.c peer.c
 	$(CC) $(CFLAGS) -c tracker.c
 file.o: file.c
 	$(CC) $(CFLAGS) -c file.c

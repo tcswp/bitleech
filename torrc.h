@@ -20,15 +20,10 @@
 #include <stdbool.h>
 #include <assert.h>
 
+#include "log.h"
 #include "metainfo.h"
 #include "file.h"
 #include "bdecode.h"
-#include "tracker.h"
 #include "peer.h"
+#include "tracker.h"
 #include "queue.h"
-
-#ifdef DBG
-#define DEBUG(msg, ...)	fprintf(stderr, "%s:%d: " msg "\n", __FILE__, __LINE__, ##__VA_ARGS__);
-#else
-#define DEBUG(msg, ...)
-#endif

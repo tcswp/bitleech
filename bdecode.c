@@ -1,9 +1,16 @@
 #include "torrc.h"
 
+int info_begin, info_end;
+int announce_num = 0, file_num = 0;
+int multi_file_mode;
+
 #ifdef DBG
-int depth, d;
-#define indent(d) for (d = 0; d < depth; d++) putchar('\t')
+int depth = 0;
+int d;
+#define indent(depth) for (d = 0; d < depth; d++) putchar('\t')
 #endif
+
+/* replace manual parsing with sscanfs */
 
 int parse_int(char *benc, int *n)
 {
@@ -12,15 +19,15 @@ int parse_int(char *benc, int *n)
 
 	for (i=1; benc[i] != 'e'; i++)
 		intstr[i-1] = benc[i];
-	intstr[i]='\0';
+	intstr[i-1]='\0';
 
 	*n = strtoul(intstr, NULL, 10);
 	return i+1;
 }
 
-int parse_string(char *benc, char *str, int *len)
+int parse_string(char *benc, char **str, int *len)
 {
-	int i, j;
+	int i;
 	int length;
 	char templen[16]; /* longest string length of num */
 
@@ -29,11 +36,11 @@ int parse_string(char *benc, char *str, int *len)
 	templen[i] = '\0';
 
 	length = atoi(templen);
-	str[length] = '\0';
-
-	for (j=0; j<length; j++)
-		str[j] = benc[j+i+1];
-
+	
+	*str = malloc(length+1);
+	memcpy(*str, benc+i+1, length);
+	(*str)[length] = '\0';
+	
 	*len = length;
 	return length+i+1;
 }
@@ -43,7 +50,11 @@ int parse_list(void (*strct_fill_callback)(void *strct, const char *key, void *v
 	int offset = 1;
 	char c = benc[0];
 
-	char *str = malloc(MAX_STR);
+	char *str;
+	char *path, *tmp_path;
+	
+	int path_len;
+	
 	int n, len;
 #ifdef DBG
 	printf("[");
@@ -63,23 +74,51 @@ int parse_list(void (*strct_fill_callback)(void *strct, const char *key, void *v
 		{
 			offset+=parse_int(benc+offset, &n);
 #ifdef DBG
-			printf(" => %lu\n", n);
+			printf(" => %u\n", n);
 #endif
 			strct_fill_callback(strct, key, (int *) n, 0);
 		}
 		else if (isdigit(c))
 		{
-			offset+=parse_string(benc+offset, str, &len);
+			if (!strcmp(key, "path"))
+			{
+				path_len = 0;
+				path = NULL;
+				while (c != 'e')
+				{
+					offset+=parse_string(benc+offset, &str, &len);
+					if (path) strcat(path, "/");
+					path_len+=(len+1);
+					tmp_path = realloc(path, path_len);
+					if (tmp_path == -1)
+					{
+						errexit("baaad realloc\n");
+					}
+					if (path == NULL && *tmp_path != '\0')
+						*tmp_path = '\0';
+					path = tmp_path;
+					strcat(path, str);
+					free(str);
+					c = benc[offset];
+				}
 #ifdef DBG
-			printf("%s", str);
+				printf("%s", path);
 #endif
-			strct_fill_callback(strct, key, str, len);
+				strct_fill_callback(strct, key, path, path_len);
+			}
+			else
+			{
+				offset+=parse_string(benc+offset, &str, &len);
+#ifdef DBG
+				printf("%s", str);
+#endif
+				strct_fill_callback(strct, key, str, len);
+			}
 		}
 	}
 #ifdef DBG
 	printf("]");
 #endif
-	free(str);
 
 	return offset+1;
 }
@@ -90,10 +129,11 @@ int parse_dict(void (*strct_fill_callback)(void *strct, const char *key, void *v
 	dict_t keyval = key;
 	char c = benc[0];
 
-	char *str = malloc(MAX_STR);
+	char *str;
 	char dict_key[64];
 	int n, len;
 #ifdef DBG
+	indent(depth);
 	printf("{");
 	depth++;
 #endif
@@ -104,7 +144,7 @@ int parse_dict(void (*strct_fill_callback)(void *strct, const char *key, void *v
 		{
 			offset+=parse_dict(strct_fill_callback, strct, benc+offset);
 			if (!strcmp("info",dict_key))
-				((struct metainfo *) strct)->info_end = offset;
+				info_end = offset;
 		}
 		else if (c == 'l')
 		{
@@ -114,13 +154,13 @@ int parse_dict(void (*strct_fill_callback)(void *strct, const char *key, void *v
 		{
 			offset+=parse_int(benc+offset, &n);
 #ifdef DBG
-			printf("%lu", n);
+			printf("%u", n);
 #endif
 			strct_fill_callback(strct, dict_key, (int *) n, 0);
 		}
 		else if (isdigit(c))
 		{
-			offset+=parse_string(benc+offset, str, &len);
+			offset+=parse_string(benc+offset, &str, &len);
 			if (keyval == key)
 			{
 #ifdef DBG
@@ -129,9 +169,10 @@ int parse_dict(void (*strct_fill_callback)(void *strct, const char *key, void *v
 				printf("%s => ", str);
 #endif				
 				if (!strcmp("info",str))
-					((struct metainfo *) strct)->info_begin = offset;
+					info_begin = offset;
+				
 				if (!strcmp("files",str))
-				((struct metainfo *) strct)->multi_file_mode = true;
+					multi_file_mode = 1;
 				
 				strcpy(dict_key, str);
 				keyval = value;
@@ -154,7 +195,6 @@ int parse_dict(void (*strct_fill_callback)(void *strct, const char *key, void *v
 	indent(depth);
 	printf("}\n");
 #endif
-	free(str);
 	
 	return offset+1;
 }
@@ -162,37 +202,39 @@ int parse_dict(void (*strct_fill_callback)(void *strct, const char *key, void *v
 void set_metainfo(void *strct, const char *key, void *value, int len)
 {	
 	struct metainfo *metainfo = (struct metainfo *) strct;
-	
-	char *str;
-	if (len)
-	{
-		str = malloc(len+1);
-		memcpy(str, value, len);
-		str[len] = '\0';
-	}
 
 	if (!strcmp(key,"announce") || !strcmp(key,"announce-list"))
-		metainfo->announce_list[metainfo->announce_num++] = str;
-	else if (!strcmp(key,"length")) 		 	 
 	{
-		if (metainfo->multi_file_mode)
-			(metainfo->file[metainfo->file_num]).length = (int) value;
+		announce_num++;
+		if ((metainfo->announce_list = realloc(metainfo->announce_list, (announce_num + 1) * sizeof (char *))) == NULL)
+		{
+			errexit("ran out of memory realloc");
+		}
+		
+		metainfo->announce_list[announce_num-1] = (char *)value;
+		metainfo->announce_list[announce_num] = NULL;
+	}
+	else if (!strcmp(key,"length"))
+	{		
+		if (multi_file_mode)
+		{
+			if ((metainfo->file = realloc(metainfo->file, (file_num + 1) * sizeof (struct file))) == NULL)
+			{
+				errexit("ran out of memory realloc");
+			}
+			(metainfo->file[file_num]).length = (int) value;
+		}
 		else
 			metainfo->length = (int) value;
 	}
 	else if (!strcmp(key,"path"))
-		(metainfo->file[metainfo->file_num++]).path = str;
+		(metainfo->file[file_num++]).path = (char *)value;
 	else if (!strcmp(key,"piece length"))
 		metainfo->piece_length = (int) value;
 	else if (!strcmp(key,"pieces"))
-	{
-		metainfo->pieces = str;
-		metainfo->num_pieces = len/20;
-		metainfo->last_piece_length = metainfo->length-((metainfo->num_pieces-1)*metainfo->piece_length);
-		metainfo->last_block_length = metainfo->last_piece_length % BLOCK_LEN;
-	}
+		metainfo->pieces = (unsigned char *)value;
 	else if (!strcmp(key,"name"))
-		metainfo->name = str;
+		metainfo->name = (char *)value;
 }
 
 void set_ares(void *strct, const char *key, void *value, int len)
@@ -202,18 +244,11 @@ void set_ares(void *strct, const char *key, void *value, int len)
 	if (!strcmp(key,"interval"))
 		ares->interval = (int) value;
 	else if (!strcmp(key,"tracker_id"))
-	{
-		ares->tracker_id = malloc(len+1);
-		memcpy(ares->tracker_id, value, len);
-		ares->tracker_id[len] = '\0';
-	}
+		ares->tracker_id = strndup((char *)value, len);
 	else if (!strcmp(key,"complete"))
 		ares->complete = (int) value;
 	else if (!strcmp(key,"incomplete"))
 		ares->incomplete = (int) value;
 	else if (!strcmp(key,"peers"))
-	{
-		ares->peer = decode_peers((unsigned char*)value, len);
-		ares->peer = len/6;
-	}
+		ares->peer_num = decode_peers(&ares->peer, (unsigned char*)value, len);
 }

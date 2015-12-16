@@ -3,7 +3,9 @@
 #define COMPACT		1
 #define MAX_RECV	0x100000
 
-#define QUEUE_LEN	10
+#define MAX_STR		0x100000
+
+#define QUEUE_LEN	5
 
 #define MIN(a,b)	((a)<(b)?(a):(b))
 
@@ -56,4 +58,4 @@ int http_announce(unsigned char *info_hash, struct announce_res *ares, struct st
 // inline long long htonll(long long h);
 int udp_announce(unsigned char *info_hash, struct announce_res *ares, struct state *state, char *hostname, char *path, char *port, struct addrinfo *res, int sockfd);
 void announce(unsigned char *info_hash, struct announce_res *ares, struct state *state, char **announce_list);
-struct peer *decode_peers(unsigned char *block, int len);
+int decode_peers(struct peer **peer, unsigned char *block, int len);
