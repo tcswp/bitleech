@@ -3,6 +3,7 @@ A barebones CLI-based BitTorrent client with UDP tracker support.
 To do:
 
 endgame mode
+upload
 connection rating to maximize dl rate
 magnet uri
 possibly DHT
