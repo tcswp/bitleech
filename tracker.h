@@ -54,8 +54,8 @@ struct announce_res
 };
 
 void encode_url(char *enc_str, char *str, int len);
-int http_announce(unsigned char *info_hash, struct announce_res *ares, struct state *state, char *hostname, char *path, char *port, int sockfd);
+int http_announce(unsigned char *info_hash, struct announce_res *ares, struct state *state, char *hostname, char *path, int sockfd);
 // inline long long htonll(long long h);
-int udp_announce(unsigned char *info_hash, struct announce_res *ares, struct state *state, char *hostname, char *path, char *port, struct addrinfo *res, int sockfd);
-void announce(unsigned char *info_hash, struct announce_res *ares, struct state *state, char **announce_list);
+int udp_announce(unsigned char *info_hash, struct announce_res *ares, struct state *state, struct addrinfo *res, int sockfd);
+char *announce(unsigned char *info_hash, struct announce_res *ares, struct state *state, char **announce_list);
 int decode_peers(struct peer **peer, unsigned char *block, int len);

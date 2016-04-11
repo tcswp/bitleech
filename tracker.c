@@ -34,7 +34,7 @@ int decode_peers(struct peer **peer, unsigned char *block, int len)
 	return num_peers;
 }
 
-int http_announce(unsigned char *info_hash, struct announce_res *ares, struct state *state, char *hostname, char *path, char *port, int sockfd)
+int http_announce(unsigned char *info_hash, struct announce_res *ares, struct state *state, char *hostname, char *path, int sockfd)
 {	
 	char request[MAX_STR], buffer[MAX_STR];
 	int response_size;
@@ -72,14 +72,15 @@ int http_announce(unsigned char *info_hash, struct announce_res *ares, struct st
 	// remove http header
 	memcpy(buffer, message_offset, response_size);
 	
-	parse_dict(&set_ares, ares, buffer);
+  if (strcmp(state->event, "stopped"))
+    parse_dict(&set_ares, ares, buffer);
 	
 	return 0;
 }
 
 #define htonll(n)	(((long long)htonl(n))<<32|htonl((long long)(n)>>32))
 
-int udp_announce(unsigned char *info_hash, struct announce_res *ares, struct state *state, char *hostname, char *path, char *port, struct addrinfo *res, int sockfd)
+int udp_announce(unsigned char *info_hash, struct announce_res *ares, struct state *state, struct addrinfo *res, int sockfd)
 {
 	int recv_size;
 
@@ -143,16 +144,16 @@ int udp_announce(unsigned char *info_hash, struct announce_res *ares, struct sta
 	areq = (struct announce_req)
 	{
 		.connection_id  = cres.connection_id,
-		.action 		= htonl(1),
+		.action 		    = htonl(1),
 		.transaction_id = htonl(rand()),
-		.downloaded		= htonll(state->downloaded),
-		.left			= htonll(state->left),
-		.uploaded		= htonll(state->uploaded),
-		.event			= 0,
-		.ip_addr		= 0,
-		.key			= 0,
-		.num_want		= -1,
-		.port			= htons(PORT)
+		.downloaded		  = htonll(state->downloaded),
+		.left			      = htonll(state->left),
+		.uploaded		    = htonll(state->uploaded),
+		.event			    = state->event,
+		.ip_addr		    = 0,
+		.key			      = 0,
+		.num_want		    = -1,
+		.port			      = htons(PORT)
 	};
 
 	memcpy(areq.info_hash,info_hash,20);
@@ -165,6 +166,8 @@ int udp_announce(unsigned char *info_hash, struct announce_res *ares, struct sta
 	}
 	debug_print("sent announce message.");
 
+  if (!strcmp(state->event, "stopped")) return 0; // don't wait for response if we're shutting down
+  
 	if ((recv_size = recvfrom(sockfd, response, MAX_RECV, 0, res->ai_addr, &(res->ai_addrlen))) < 1)
 	{
 		logerr("recvfrom");
@@ -279,7 +282,7 @@ void announce(unsigned char *info_hash, struct announce_res *ares, struct state 
 		if (!strcmp(proto, "udp"))
 		{
 			debug_print("trying udp tracker...");
-			if (udp_announce(info_hash, ares, state, hostname, path, port, res, sockfd) == 0)
+			if (udp_announce(info_hash, ares, state, res, sockfd) == 0)
 				break;
 		}
 		else if (!strcmp(proto, "http"))
@@ -292,11 +295,13 @@ void announce(unsigned char *info_hash, struct announce_res *ares, struct state 
 				continue;
 			}
 
-			if (http_announce(info_hash, ares, state, hostname, path, port, sockfd) == 0)
+			if (http_announce(info_hash, ares, state, hostname, path, sockfd) == 0)
 				break;
 		}
 		else debug_print("invalid protocol");
 	}
 	
 	freeaddrinfo(res);
+  
+  return announce_list[i];
 }

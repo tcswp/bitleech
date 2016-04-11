@@ -50,7 +50,6 @@ struct state
 	unsigned char *pending_reqs;
 	unsigned char *requests;
 	int	requested;
-	int	got;
 	int	num_choked;
 	int	num_connected;
 	
@@ -99,4 +98,4 @@ struct msg
 } __attribute__((packed));
 
 void start_pwp(struct peer *peer, int peer_num, struct state *state);
-void init_state(struct state *state);
+void init_state(char *save_file, struct state *state);

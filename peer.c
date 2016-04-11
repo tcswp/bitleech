@@ -71,25 +71,42 @@ int parse_msgs(struct msg *msg, unsigned char *msg_stream, int *left)
 	return m;
 }
 
-void init_state(struct state *state)
+void init_state(char *save_file, struct state *state)
 {
-	// need to fetch these values from a save file
-	*state = (struct state)
-	{
-		.uploaded = 0, 
-		.downloaded = 0,
-		.left  = num_pieces,
-		.event = "started"
-	};
-	
-	state->piece_freq 	 = calloc(num_pieces,sizeof (char));
-	state->have 	 	 = calloc(mask_size(num_pieces), sizeof (char));
-	state->pending_reqs  = calloc(mask_size(num_pieces), sizeof (char));
-	state->requests		 = calloc(mask_size(num_pieces), sizeof (char));
-	state->requested	 = 0;
-	state->got			 = 0;
-	state->num_choked	 = 0;
-	state->num_connected = 0;
+  int fd;
+  struct iovec iov[6];
+  
+  *state = (struct state) { .event = "started" };
+  
+  state->piece_freq 	 = calloc(num_pieces,sizeof (char));
+  state->have 	 	     = calloc(mask_size(num_pieces), sizeof (char));
+  state->pending_reqs  = calloc(mask_size(num_pieces), sizeof (char));
+  state->requests		   = calloc(mask_size(num_pieces), sizeof (char));
+  
+  state->num_choked	   = 0;
+  state->num_connected = 0;
+  
+  if (access(save_file, F_OK ) != -1)
+  {
+    iov[0].iov_base = state.have;        iov[0].iov_len = num_pieces;
+    iov[1].iov_base = state.requests;    iov[1].iov_len = num_pieces;
+    iov[2].iov_base = &state.requested;  iov[2].iov_len = sizeof int;
+    iov[3].iov_base = &state.uploaded;   iov[3].iov_len = sizeof int;
+    iov[4].iov_base = &state.downloaded; iov[4].iov_len = sizeof int;
+    iov[5].iov_base = &state.left;       iov[5].iov_len = sizeof int;
+    
+    chdir(SAVE_DIR);
+    fd = open(save_file, O_RDONLY);
+    readv(fd, iovec, 6);
+    close(fd);
+  }
+  else
+  {
+    state->requested	   = 0;
+    state->uploaded      = 0;
+    state->downloaded		 = 0;
+    state->left          = 0;
+  }
 }
 
 void init_peer(struct peer *peer)
@@ -262,11 +279,11 @@ void handle_msgs(struct state *state, struct peer *peer, struct msg *msgs, int n
 					
 					if (check_hash(req->piece, msg.piece.index))
 					{
-						state->got++;
+						state->downloaded++;
 						debug_print("downloaded piece %x", msg.piece.index);
-						debug_print("got %d/%d", state->got, num_pieces);
+						debug_print("downloaded %d/%d", state->downloaded, num_pieces);
 						debug_print("requested %d/%d", state->requested, num_pieces);
-						printf("\r[%.02f%%]", ((float)state->got/num_pieces)*100);
+						printf("\r[%.02f%%]", ((float)state->downloaded/num_pieces)*100);
 						fflush(stdout);
 						set_bit(state->have, msg.piece.index);
 						peer->pieces_downloaded++;
@@ -381,7 +398,7 @@ void start_pwp(struct peer *peer, int peer_num, struct state *state)
 	connect_peers(peer_fds, peer, peer_num);
 	
 	signal(SIGPIPE, SIG_IGN);
-	while (state->got != num_pieces)
+	while (state->downloaded != num_pieces)
 	{		
 		poll(peer_fds, peer_num, -1);
 		
