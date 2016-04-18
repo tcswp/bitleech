@@ -1,4 +1,4 @@
-#include "torrc.h"
+#include "ntorrent.h"
 
 void encode_url(char* enc_str, char *str, int len)
 {
@@ -78,7 +78,9 @@ int http_announce(unsigned char *info_hash, struct announce_res *ares, struct st
 	return 0;
 }
 
-#define htonll(n)	(((long long)htonl(n))<<32|htonl((long long)(n)>>32))
+#ifndef __APPLE__
+#define htonll(n)	(((long long)htonl(n&0xFFFFFFFF))<<32|htonl((long long)(n)>>32))
+#endif
 
 int udp_announce(unsigned char *info_hash, struct announce_res *ares, struct state *state, struct addrinfo *res, int sockfd)
 {
@@ -98,7 +100,7 @@ int udp_announce(unsigned char *info_hash, struct announce_res *ares, struct sta
 
 	creq.connection_id 	= htonll(0x41727101980);
 	creq.action 		= 0;
-	creq.transaction_id = htonl(rand());
+	creq.transaction_id = rand();
 	
 	tv.tv_sec = 5;
 	tv.tv_usec = 0;
@@ -115,7 +117,7 @@ int udp_announce(unsigned char *info_hash, struct announce_res *ares, struct sta
 	}
 	debug_print("sent connect request.");
 
-	if ((recv_size = recvfrom(sockfd, &cres, sizeof (struct connect_req), 0, res->ai_addr, &(res->ai_addrlen))) < 1)
+	if ((recv_size = recvfrom(sockfd, &cres, sizeof (struct connect_res), 0, res->ai_addr, &(res->ai_addrlen))) < 1)
 	{
 		logerr("error receiving");
 		return -1;
@@ -149,7 +151,7 @@ int udp_announce(unsigned char *info_hash, struct announce_res *ares, struct sta
 		.downloaded		  = htonll(state->downloaded),
 		.left			      = htonll(state->left),
 		.uploaded		    = htonll(state->uploaded),
-		.event			    = state->event,
+		.event			    = 2,
 		.ip_addr		    = 0,
 		.key			      = 0,
 		.num_want		    = -1,
@@ -186,8 +188,8 @@ int udp_announce(unsigned char *info_hash, struct announce_res *ares, struct sta
 
 	if (transaction_id != areq.transaction_id)
 	{
-		logerr("sent transaction id    : %lx", areq.transaction_id);
-		logerr("received transaction id: %lx", transaction_id);
+		//logerr("sent transaction id    : %x", areq.transaction_id);
+		//logerr("received transaction id: %x", transaction_id);
 		logerr("UDP tracker sent unexpected transaction value.");
 		return -1;
 	}
@@ -208,100 +210,92 @@ int udp_announce(unsigned char *info_hash, struct announce_res *ares, struct sta
 	return 0;
 }
 
-void announce(unsigned char *info_hash, struct announce_res *ares, struct state *state, char **announce_list)
+int announce(unsigned char *info_hash, struct announce_res *ares, struct state *state, char *tracker_url)
 {
-	char tracker_url[MAX_STR];
 	char hostname[MAX_STR], proto[5], port[6], path[32];
 
 	int sockfd;
 	struct addrinfo hints, *res, *resp;
 	int gai_status;
-	
-	int i;
-	
-	for (i = 0; announce_list[i] != NULL; i++)
-	{	
-		strcpy(tracker_url, announce_list[i]);
 
-		if (sscanf(tracker_url, "%*[^:]://%[^:,/]", hostname) != 1)
-		{
-			logerr("url hostname pattern match failed");
-			continue;
-		}
-		debug_print("hostname is %s", hostname);
+  if (sscanf(tracker_url, "%*[^:]://%[^:,/]", hostname) != 1)
+  {
+    logerr("url hostname pattern match failed");
+    return -1;
+  }
+  debug_print("hostname is %s", hostname);
 
-		if (sscanf(tracker_url, "%[^:]:", proto) != 1)
-		{
-			logerr("url protocol pattern match failed");
-			continue;
-		}
-		debug_print("protocol is %s", proto);
+  if (sscanf(tracker_url, "%[^:]:", proto) != 1)
+  {
+    logerr("url protocol pattern match failed");
+    return -1;
+  }
+  debug_print("protocol is %s", proto);
 
-		if (sscanf(tracker_url, "%*[^:]://%*[^:]:%[0-9]", port) != 1)
-		{
-			if (strcmp(proto, "http") == 0)
-				strcpy(port, "80");
-			else
-			{
-				logerr("url port pattern match failed");
-				continue;
-			}
-		}
-		debug_print("port is %s", port);
+  if (sscanf(tracker_url, "%*[^:]://%*[^:]:%[0-9]", port) != 1)
+  {
+    if (strcmp(proto, "http") == 0)
+      strcpy(port, "80");
+    else
+    {
+      logerr("url port pattern match failed");
+      return -1;
+    }
+  }
+  debug_print("port is %s", port);
 
-		if (sscanf(tracker_url, "%*[^:]://%*[^/]/%[^?]?", path) != 1)
-		{
-			logerr("url path is messed up? no ...../announce<-");
-			continue;
-		}
-		debug_print("path is %s", path);
+  if (sscanf(tracker_url, "%*[^:]://%*[^/]/%[^?]?", path) != 1)
+  {
+    logerr("url path is messed up? no ...../announce<-");
+    return -1;
+  }
+  debug_print("path is %s", path);
 
-		memset(&hints, 0,  sizeof(hints));
-		hints.ai_family = AF_UNSPEC;
-		hints.ai_socktype = !strcmp(proto, "udp") ? SOCK_DGRAM : SOCK_STREAM;
+  memset(&hints, 0,  sizeof(hints));
+  hints.ai_family = AF_UNSPEC;
+  hints.ai_socktype = !strcmp(proto, "udp") ? SOCK_DGRAM : SOCK_STREAM;
 
-		if ((gai_status = getaddrinfo(hostname, port, &hints, &res)) != 0)
-		{
-			logerr("%s", gai_strerror(gai_status));
-			continue;
-		}
+  if ((gai_status = getaddrinfo(hostname, port, &hints, &res)) != 0)
+  {
+    logerr("%s", gai_strerror(gai_status));
+    return -1;
+  }
 
-		for (resp = res; resp != NULL; resp = res->ai_next)
-			if ((sockfd = socket(resp->ai_family, resp->ai_socktype, resp->ai_protocol)) != -1)
-			{
-				debug_print("found tracker.");
-				break;
-			}
+  for (resp = res; resp != NULL; resp = res->ai_next)
+    if ((sockfd = socket(resp->ai_family, resp->ai_socktype, resp->ai_protocol)) != -1)
+    {
+      debug_print("found tracker.");
+      break;
+    }
 
-		if (resp == NULL)
-		{
-			debug_print("couldn't find tracker \"%s\"", hostname);
-			continue;
-		}
+  if (resp == NULL)
+  {
+    debug_print("couldn't find tracker \"%s\"", hostname);
+    return -1;
+  }
 
-		if (!strcmp(proto, "udp"))
-		{
-			debug_print("trying udp tracker...");
-			if (udp_announce(info_hash, ares, state, res, sockfd) == 0)
-				break;
-		}
-		else if (!strcmp(proto, "http"))
-		{
-			debug_print("trying http tracker...");
+  if (!strcmp(proto, "udp"))
+  {
+    debug_print("trying udp tracker...");
+    if (udp_announce(info_hash, ares, state, res, sockfd))
+      return -1;
+  }
+  else if (!strcmp(proto, "http"))
+  {
+    debug_print("trying http tracker...");
 
-			if (connect(sockfd, res->ai_addr, res->ai_addrlen) == -1)
-			{
-				logerr("connect()");
-				continue;
-			}
+    if (connect(sockfd, res->ai_addr, res->ai_addrlen) == -1)
+    {
+      logerr("connect()");
+      return -1;
+    }
 
-			if (http_announce(info_hash, ares, state, hostname, path, sockfd) == 0)
-				break;
-		}
-		else debug_print("invalid protocol");
-	}
+    if (http_announce(info_hash, ares, state, hostname, path, sockfd))
+      return -1;
+  }
+  else debug_print("invalid protocol");
 	
 	freeaddrinfo(res);
   
-  return announce_list[i];
+  return 0;
 }

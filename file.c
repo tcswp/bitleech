@@ -1,36 +1,45 @@
-#include "torrc.h"
+#include "ntorrent.h"
 
 extern struct metainfo metainfo;
 extern int info_begin, info_end;
 
+int *files;
 int file_num, multi_file_mode;
 int num_pieces, last_piece_length, last_block_length;
 
-void save_state(int)
+void save_state(int sig)
 {
   int fd;
   struct iovec iov[6];
-  extern char *hostname;
+  extern char *tracker_url, save_file[29];
   extern struct state state;
   
-  mkdir(SAVE_DIR, 0777);
-  chdir(SAVE_DIR);
+  char path[PATH_MAX];
+  char *home_dir = getenv("HOME");
+  strcpy(path,home_dir);
+  strcat(path,"/.ntorrent");
   
-  fd = open(save_file, O_CREAT|O_WRONLY);
-  printf("Saving state...");
+  mkdir(path, 0777);
   
-  iov[0].iov_base = state.have;        iov[0].iov_len = num_pieces;
-  iov[1].iov_base = state.requests;    iov[1].iov_len = num_pieces;
-  iov[2].iov_base = &state.requested;  iov[2].iov_len = sizeof int;
-  iov[3].iov_base = &state.uploaded;   iov[3].iov_len = sizeof int;
-  iov[4].iov_base = &state.downloaded; iov[4].iov_len = sizeof int;
-  iov[5].iov_base = &state.left;       iov[5].iov_len = sizeof int;
+  strcat(path,"/");
+  strcat(path,save_file);
+  
+  fd = open(path, O_CREAT|O_WRONLY, S_IRUSR|S_IWUSR);
+  debug_print("saving state to %s", path);
+  
+  iov[0].iov_base = state.have;        iov[0].iov_len = mask_size(num_pieces);
+  iov[1].iov_base = state.requests;    iov[1].iov_len = mask_size(num_pieces);
+  iov[2].iov_base = &state.requested;  iov[2].iov_len = sizeof (uint32_t);
+  iov[3].iov_base = &state.uploaded;   iov[3].iov_len = sizeof (uint32_t);
+  iov[4].iov_base = &state.downloaded; iov[4].iov_len = sizeof (uint32_t);
+  iov[5].iov_base = &state.left;       iov[5].iov_len = sizeof (uint32_t);
   
   writev(fd, iov, 6);
   close(fd);
   
   strcpy(state.event, "stopped");
-  announce(metainfo.info_hash, NULL, &state, &hostname);
+  announce(metainfo.info_hash, NULL, &state, tracker_url);
+  exit(0);
 }
 
 int mkpath(char *path, mode_t mode)
@@ -91,13 +100,30 @@ struct metainfo parse_torrent_file(char *filename)
 	SHA1((unsigned char *)benc+info_begin, info_size, sha1_hash);
 	memcpy(new_metainfo.info_hash, sha1_hash, 20);
 	
+  files = malloc(file_num);
 	if (multi_file_mode)
 	{
+    if (new_metainfo.name) 
+		{
+			mkdir(new_metainfo.name, 0777);
+			if (chdir(new_metainfo.name) == -1)
+				perror("chdir\n");
+		}
+		
 		for (i = 0; i < file_num; i++)
+    {
+      mkpath(new_metainfo.file[i].path, 0777);
+			files[i] = open(new_metainfo.file[i].path, O_CREAT|O_WRONLY, S_IRUSR|S_IWUSR);
+			
 			total_length += new_metainfo.file[i].length;
+    }
 	}
 	else
+  {
+    files[0] = open(new_metainfo.name, O_CREAT|O_WRONLY, S_IRUSR|S_IWUSR);
+    
 		total_length = new_metainfo.length;
+  }
 	
 	num_pieces = ceil((float)total_length/new_metainfo.piece_length);
 	last_piece_length = total_length-((num_pieces-1)*new_metainfo.piece_length);
@@ -112,7 +138,6 @@ void save_piece(unsigned char *piece, int index)
 {
 	unsigned long eof = 0;
 	int i;
-  extern int **files;
 	
 	int begin = index*metainfo.piece_length;
 	int length = piece_len(index);
@@ -121,7 +146,7 @@ void save_piece(unsigned char *piece, int index)
 	int p1len, p2len;
 
 	if (!multi_file_mode)
-		pwrite(metainfo.name, piece, length, begin);
+		pwrite(files[0], piece, length, begin);
 	else
 	{
 		for (i = 0; i < file_num; i++)

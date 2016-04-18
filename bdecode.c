@@ -1,4 +1,4 @@
-#include "torrc.h"
+#include "ntorrent.h"
 
 int info_begin, info_end;
 int announce_num = 0, file_num = 0;

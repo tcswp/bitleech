@@ -5,6 +5,8 @@
 
 #define RECV_MAX	BLOCK_LEN+13
 
+#define mask_size(n)  ceil(((float)(n))/8)
+
 typedef enum
 {
 	CHOKE, UNCHOKE,
@@ -49,13 +51,13 @@ struct state
 	unsigned char *have;
 	unsigned char *pending_reqs;
 	unsigned char *requests;
-	int	requested;
-	int	num_choked;
-	int	num_connected;
+	uint32_t	requested;
+	uint32_t	num_choked;
+	uint32_t	num_connected;
 	
-	int	uploaded;
-	int	downloaded;
-	int	left;
+	uint32_t	uploaded;
+	uint32_t	downloaded;
+	uint32_t	left;
 	char event[9];
 };
 
@@ -63,33 +65,33 @@ struct handshake
 {
 	unsigned char pstrlen;
 	char pstr[sizeof(PSTR)];
-	unsigned long reserved;
+	uint32_t reserved;
 	unsigned char info_hash[20];
 	char peer_id[20];
 };
 
 struct msg_request
 {
-	int index;
-	int begin;
-	int length;
+	uint32_t index;
+	uint32_t begin;
+	uint32_t length;
 };
 
 struct msg_piece
 {
-	int index;
-	int begin;
+	uint32_t index;
+	uint32_t begin;
 	unsigned char *block;
 };
 
 struct msg
 {
-	int length;
+	uint32_t length;
 	char id;
 
 	union
 	{
-		int have;
+		uint32_t have;
 		struct msg_request request;
 		struct msg_piece piece;
 		unsigned char *bitfield;

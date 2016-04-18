@@ -1,1 +1,1 @@
-void base64_encode(char *encoding, char *str);
+int base64_encode(char *encoding, unsigned char *str);

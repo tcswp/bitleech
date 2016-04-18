@@ -19,7 +19,8 @@
 #include <poll.h>
 #include <stdbool.h>
 #include <assert.h>
-#include <signal.h>
+#include <getopt.h>
+#include <limits.h>
 
 #include "log.h"
 #include "metainfo.h"
@@ -28,5 +29,4 @@
 #include "peer.h"
 #include "tracker.h"
 #include "queue.h"
-
-#define SAVE_DIR  "~/.ntorrent"
+#include "base64.h"

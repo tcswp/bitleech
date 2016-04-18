@@ -1,4 +1,4 @@
-#include "torrc.h"
+#include "ntorrent.h"
 
 void init_queue(struct queue *queue)
 {

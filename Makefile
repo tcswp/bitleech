@@ -2,7 +2,7 @@ CC=gcc
 TARGET=test
 CFLAGS=-Wall -ggdb -DDBG
 LDFLAGS=-lm -lssl -lcrypto
-OBJS=bdecode.o tracker.o queue.o file.o peer.o main.o
+OBJS=bdecode.o tracker.o queue.o file.o peer.o main.o base64.o
 
 default: $(TARGET)
 
@@ -21,6 +21,8 @@ queue.o: queue.c
 	$(CC) $(CFLAGS) -c queue.c
 main.o: main.c
 	$(CC) $(CFLAGS) -c main.c
-
+base64.o: base64.c
+	$(CC) $(CFLAGS) -c base64.c
+	
 clean:
 	-@rm *.o $(TARGET) *~

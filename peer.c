@@ -1,4 +1,4 @@
-#include "torrc.h"
+#include "ntorrent.h"
 
 extern int num_pieces, last_piece_length, last_block_length;
 
@@ -6,7 +6,6 @@ extern int num_pieces, last_piece_length, last_block_length;
 
 #define get_bit(bf,i) ((bf[(i)/8]>>(7-((i)%8)))&1)
 #define set_bit(bf,i) (bf[(i)/8]^=(1<<(7-((i)%8))))
-#define mask_size(n)  ceil(((float)(n))/8)
 
 extern struct metainfo metainfo;
 
@@ -88,17 +87,20 @@ void init_state(char *save_file, struct state *state)
   
   if (access(save_file, F_OK ) != -1)
   {
-    iov[0].iov_base = state.have;        iov[0].iov_len = num_pieces;
-    iov[1].iov_base = state.requests;    iov[1].iov_len = num_pieces;
-    iov[2].iov_base = &state.requested;  iov[2].iov_len = sizeof int;
-    iov[3].iov_base = &state.uploaded;   iov[3].iov_len = sizeof int;
-    iov[4].iov_base = &state.downloaded; iov[4].iov_len = sizeof int;
-    iov[5].iov_base = &state.left;       iov[5].iov_len = sizeof int;
+    debug_print("reading saved state.");
     
-    chdir(SAVE_DIR);
+    iov[0].iov_base = state->have;        iov[0].iov_len = mask_size(num_pieces);
+    iov[1].iov_base = state->requests;    iov[1].iov_len = mask_size(num_pieces);
+    iov[2].iov_base = &state->requested;  iov[2].iov_len = sizeof (uint32_t);
+    iov[3].iov_base = &state->uploaded;   iov[3].iov_len = sizeof (uint32_t);
+    iov[4].iov_base = &state->downloaded; iov[4].iov_len = sizeof (uint32_t);
+    iov[5].iov_base = &state->left;       iov[5].iov_len = sizeof (uint32_t);
+    
     fd = open(save_file, O_RDONLY);
-    readv(fd, iovec, 6);
+    readv(fd, iov, 6);
     close(fd);
+    
+    debug_print("we have %d downloaded and %d left",state->downloaded,state->left);
   }
   else
   {
@@ -231,7 +233,7 @@ void connect_peers(struct pollfd *peer_fds, struct peer *peer, int peer_num)
 	}
 }
 
-void handle_msgs(struct state *state, struct peer *peer, struct msg *msgs, int num_msgs)
+void handle_msgs(struct state *state, struct peer *peer, struct msg *msgs, int num_msgs, int peer_num, struct pollfd *peer_fds)
 {
 	int i, j;
 	struct msg msg;
@@ -290,7 +292,8 @@ void handle_msgs(struct state *state, struct peer *peer, struct msg *msgs, int n
 
 						save_piece(req->piece, msg.piece.index);
 						
-						// send out haves
+						for (j = 0; j < peer_num; j++)
+              send_have(peer_fds[j].fd, msg.piece.index);
 					}
 					else
 					{
@@ -471,7 +474,7 @@ void start_pwp(struct peer *peer, int peer_num, struct state *state)
 				left = recv_size;
 				num_msgs = parse_msgs(msg, recv_buffer, &left);
 				recv(peer_fds[i].fd, recv_buffer, recv_size-left, 0);
-				handle_msgs(state, &peer[i], msg, num_msgs);
+				handle_msgs(state, &peer[i], msg, num_msgs, peer_num, peer_fds);
 				
 				if (peer[i].flags & RECVD_BITFIELD)
 				{
@@ -500,4 +503,6 @@ void start_pwp(struct peer *peer, int peer_num, struct state *state)
 		}
 	}
 	printf("done.\n");
+  //announce();
+  //start seeding
 }

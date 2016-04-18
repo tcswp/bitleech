@@ -1,9 +1,10 @@
 #include <math.h>
+#include <string.h>
 
-void base64_encode(char *encoding, char *str)
+int base64_encode(char *encoding, unsigned char *str)
 {
-    int i,j;
-    int len = strlen(str);
+    int i;
+    int len = strlen((char *)str);
     int num_bytes = 4*ceil((double)len/3);
     char alph[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+_";
  
@@ -16,4 +17,6 @@ void base64_encode(char *encoding, char *str)
         encoding[i*4+3]=(rem&&num_bytes/4-1==i)?'=':alph[str[i*3+2]&63];
     }
     encoding[num_bytes] = '\0';
+    
+    return num_bytes;
 }
