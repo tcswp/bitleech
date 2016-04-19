@@ -1,4 +1,4 @@
-#include "ntorrent.h"
+#include "bitleech.h"
 
 struct metainfo metainfo;
 extern int multi_file_mode, file_num, num_pieces;
@@ -30,7 +30,7 @@ int main(int argc, char **argv)
   char path[PATH_MAX];
   char *home_dir;
 
-	printf("nTorrent 1.0\nAuthor: Steven Hastings\n\n");
+	printf("bitleech 1.0\nAuthor: Steven Hastings\n\n");
 
 	logfp = fopen("log", "a+");
 	
@@ -39,7 +39,7 @@ int main(int argc, char **argv)
   base64_encode(save_file, metainfo.info_hash);
   home_dir = getenv("HOME");
   strcpy(path,home_dir);
-  strcat(path,"/.ntorrent/");
+  strcat(path,"/.bitleech/");
   strcat(path,save_file);
   
 	init_state(path, &state);

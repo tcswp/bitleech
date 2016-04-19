@@ -6,5 +6,5 @@ extern FILE *logfp;
 #ifdef DBG
 #define debug_print(msg, ...)	printf(msg "\n", ##__VA_ARGS__)
 #else
-#define debug_print
+#define debug_print(...) (void)0
 #endif

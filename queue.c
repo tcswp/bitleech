@@ -1,4 +1,4 @@
-#include "ntorrent.h"
+#include "bitleech.h"
 
 void init_queue(struct queue *queue)
 {

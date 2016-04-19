@@ -1,4 +1,4 @@
-#include "ntorrent.h"
+#include "bitleech.h"
 
 void encode_url(char* enc_str, char *str, int len)
 {

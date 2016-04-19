@@ -1,4 +1,4 @@
-#include "ntorrent.h"
+#include "bitleech.h"
 
 extern int num_pieces, last_piece_length, last_block_length;
 
@@ -233,7 +233,7 @@ void connect_peers(struct pollfd *peer_fds, struct peer *peer, int peer_num)
 	}
 }
 
-void handle_msgs(struct state *state, struct peer *peer, struct msg *msgs, int num_msgs, int peer_num, struct pollfd *peer_fds)
+void handle_msgs(struct state *state, struct peer *peer, struct msg *msgs, int num_msgs)
 {
 	int i, j;
 	struct msg msg;
@@ -291,9 +291,6 @@ void handle_msgs(struct state *state, struct peer *peer, struct msg *msgs, int n
 						peer->pieces_downloaded++;
 
 						save_piece(req->piece, msg.piece.index);
-						
-						for (j = 0; j < peer_num; j++)
-              send_have(peer_fds[j].fd, msg.piece.index);
 					}
 					else
 					{
@@ -474,7 +471,7 @@ void start_pwp(struct peer *peer, int peer_num, struct state *state)
 				left = recv_size;
 				num_msgs = parse_msgs(msg, recv_buffer, &left);
 				recv(peer_fds[i].fd, recv_buffer, recv_size-left, 0);
-				handle_msgs(state, &peer[i], msg, num_msgs, peer_num, peer_fds);
+				handle_msgs(state, &peer[i], msg, num_msgs);
 				
 				if (peer[i].flags & RECVD_BITFIELD)
 				{
@@ -503,6 +500,4 @@ void start_pwp(struct peer *peer, int peer_num, struct state *state)
 		}
 	}
 	printf("done.\n");
-  //announce();
-  //start seeding
 }

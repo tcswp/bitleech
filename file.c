@@ -1,4 +1,4 @@
-#include "ntorrent.h"
+#include "bitleech.h"
 
 extern struct metainfo metainfo;
 extern int info_begin, info_end;
@@ -17,7 +17,7 @@ void save_state(int sig)
   char path[PATH_MAX];
   char *home_dir = getenv("HOME");
   strcpy(path,home_dir);
-  strcat(path,"/.ntorrent");
+  strcat(path,"/.bitleech");
   
   mkdir(path, 0777);
   

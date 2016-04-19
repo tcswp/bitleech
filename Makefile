@@ -1,6 +1,6 @@
 CC=gcc
-TARGET=test
-CFLAGS=-Wall -ggdb -DDBG
+TARGET=bitleech
+CFLAGS=-Wall -ggdb #-DDBG
 LDFLAGS=-lm -lssl -lcrypto
 OBJS=bdecode.o tracker.o queue.o file.o peer.o main.o base64.o
 

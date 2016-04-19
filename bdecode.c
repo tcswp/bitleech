@@ -1,4 +1,4 @@
-#include "ntorrent.h"
+#include "bitleech.h"
 
 int info_begin, info_end;
 int announce_num = 0, file_num = 0;
@@ -76,7 +76,7 @@ int parse_list(void (*strct_fill_callback)(void *strct, const char *key, void *v
 #ifdef DBG
 			printf(" => %u\n", n);
 #endif
-			strct_fill_callback(strct, key, (int *) n, 0);
+			strct_fill_callback(strct, key, &n, 0);
 		}
 		else if (isdigit(c))
 		{
@@ -90,10 +90,7 @@ int parse_list(void (*strct_fill_callback)(void *strct, const char *key, void *v
 					if (path) strcat(path, "/");
 					path_len+=(len+1);
 					tmp_path = realloc(path, path_len);
-					if (tmp_path == -1)
-					{
-						errexit("baaad realloc\n");
-					}
+
 					if (path == NULL && *tmp_path != '\0')
 						*tmp_path = '\0';
 					path = tmp_path;
@@ -156,7 +153,7 @@ int parse_dict(void (*strct_fill_callback)(void *strct, const char *key, void *v
 #ifdef DBG
 			printf("%u", n);
 #endif
-			strct_fill_callback(strct, dict_key, (int *) n, 0);
+			strct_fill_callback(strct, dict_key, &n, 0);
 		}
 		else if (isdigit(c))
 		{
@@ -222,15 +219,15 @@ void set_metainfo(void *strct, const char *key, void *value, int len)
 			{
 				errexit("ran out of memory realloc");
 			}
-			(metainfo->file[file_num]).length = (int) value;
+			(metainfo->file[file_num]).length = *(int*) value;
 		}
 		else
-			metainfo->length = (int) value;
+			metainfo->length = *(int*) value;
 	}
 	else if (!strcmp(key,"path"))
 		(metainfo->file[file_num++]).path = (char *)value;
 	else if (!strcmp(key,"piece length"))
-		metainfo->piece_length = (int) value;
+		metainfo->piece_length = *(int*) value;
 	else if (!strcmp(key,"pieces"))
 		metainfo->pieces = (unsigned char *)value;
 	else if (!strcmp(key,"name"))
@@ -242,13 +239,13 @@ void set_ares(void *strct, const char *key, void *value, int len)
 	struct announce_res *ares = (struct announce_res *) strct;
 	
 	if (!strcmp(key,"interval"))
-		ares->interval = (int) value;
+		ares->interval = *(int *) value;
 	else if (!strcmp(key,"tracker_id"))
 		ares->tracker_id = strndup((char *)value, len);
 	else if (!strcmp(key,"complete"))
-		ares->complete = (int) value;
+		ares->complete = *(int *) value;
 	else if (!strcmp(key,"incomplete"))
-		ares->incomplete = (int) value;
+		ares->incomplete = *(int *) value;
 	else if (!strcmp(key,"peers"))
 		ares->peer_num = decode_peers(&ares->peer, (unsigned char*)value, len);
 }
