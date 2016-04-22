@@ -27,8 +27,8 @@ void save_state(int sig)
   fd = open(path, O_CREAT|O_WRONLY, S_IRUSR|S_IWUSR);
   debug_print("saving state to %s", path);
   
-  iov[0].iov_base = state.have;        iov[0].iov_len = mask_size(num_pieces);
-  iov[1].iov_base = state.requests;    iov[1].iov_len = mask_size(num_pieces);
+  iov[0].iov_base = state.have;        iov[0].iov_len = NUM_BITS(num_pieces);
+  iov[1].iov_base = state.requests;    iov[1].iov_len = NUM_BITS(num_pieces);
   iov[2].iov_base = &state.requested;  iov[2].iov_len = sizeof (uint32_t);
   iov[3].iov_base = &state.uploaded;   iov[3].iov_len = sizeof (uint32_t);
   iov[4].iov_base = &state.downloaded; iov[4].iov_len = sizeof (uint32_t);

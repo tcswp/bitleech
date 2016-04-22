@@ -5,7 +5,7 @@
 
 #define RECV_MAX	BLOCK_LEN+13
 
-#define mask_size(n)  ceil(((float)(n))/8)
+#define NUM_BITS(n)  ceil(((float)(n))/8)
 
 typedef enum
 {

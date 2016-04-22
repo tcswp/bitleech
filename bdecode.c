@@ -10,8 +10,6 @@ int d;
 #define indent(depth) for (d = 0; d < depth; d++) putchar('\t')
 #endif
 
-/* replace manual parsing with sscanfs */
-
 int parse_int(char *benc, int *n)
 {
 	char intstr[16];
@@ -45,7 +43,7 @@ int parse_string(char *benc, char **str, int *len)
 	return length+i+1;
 }
 
-int parse_list(void (*strct_fill_callback)(void *strct, const char *key, void *value, int len), void *strct, char *benc, char *key)
+int parse_list(void (*strct_fill_callback)(void *strct, const char *key, void *value, ...), void *strct, char *benc, char *key)
 {
 	int offset = 1;
 	char c = benc[0];
@@ -120,7 +118,7 @@ int parse_list(void (*strct_fill_callback)(void *strct, const char *key, void *v
 	return offset+1;
 }
 
-int parse_dict(void (*strct_fill_callback)(void *strct, const char *key, void *value, int len), void *strct, char *benc)
+int parse_dict(void (*strct_fill_callback)(void *strct, const char *key, void *value, ...), void *strct, char *benc)
 {
 	int offset = 1;
 	dict_t keyval = key;
@@ -196,8 +194,8 @@ int parse_dict(void (*strct_fill_callback)(void *strct, const char *key, void *v
 	return offset+1;
 }
 
-void set_metainfo(void *strct, const char *key, void *value, int len)
-{	
+void set_metainfo(void *strct, const char *key, void *value, ...)
+{  
 	struct metainfo *metainfo = (struct metainfo *) strct;
 
 	if (!strcmp(key,"announce") || !strcmp(key,"announce-list"))
@@ -234,18 +232,25 @@ void set_metainfo(void *strct, const char *key, void *value, int len)
 		metainfo->name = (char *)value;
 }
 
-void set_ares(void *strct, const char *key, void *value, int len)
+void set_ares(void *strct, const char *key, void *value, ...)
 {
+  va_list va;
+  int len;
+  
 	struct announce_res *ares = (struct announce_res *) strct;
 	
 	if (!strcmp(key,"interval"))
 		ares->interval = *(int *) value;
 	else if (!strcmp(key,"tracker_id"))
-		ares->tracker_id = strndup((char *)value, len);
+		ares->tracker_id = (char *) value;
 	else if (!strcmp(key,"complete"))
 		ares->complete = *(int *) value;
 	else if (!strcmp(key,"incomplete"))
 		ares->incomplete = *(int *) value;
 	else if (!strcmp(key,"peers"))
+  {
+    va_start(va, value);
+    len = va_arg(va, int);
 		ares->peer_num = decode_peers(&ares->peer, (unsigned char*)value, len);
+  }
 }

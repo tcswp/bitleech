@@ -1,22 +1,23 @@
 #include "bitleech.h"
 
 extern int num_pieces, last_piece_length, last_block_length;
-
-#define check_hash(piece,index) (!memcmp(SHA1(piece,piece_len(index),NULL),metainfo.pieces+20*index,20))
-
-#define get_bit(bf,i) ((bf[(i)/8]>>(7-((i)%8)))&1)
-#define set_bit(bf,i) (bf[(i)/8]^=(1<<(7-((i)%8))))
-
 extern struct metainfo metainfo;
 
-int rarest_first(struct state *state, unsigned char *bitfield)
+static inline int check_hash(unsigned char *piece, int index) 
+{ return !memcmp(SHA1(piece,piece_len(index),NULL),metainfo.pieces+20*index,20); }
+
+static inline int get_bit(unsigned char *bf, int i) { return (bf[i/8]>>(7-(i%8)))&1; }
+static inline void set_bit(unsigned char *bf, int i){ bf[i/8]^=(1<<(7-(i%8))); }
+
+int rarest_first(struct state *state, unsigned char *bitfield, int num_pieces)
 {
 	int i;
 	int rarest;
 
 	rarest = -1;
 	for (i = 0; i < num_pieces; i++)
-		if (state->piece_freq[i] && !get_bit(state->have, i) && !get_bit(state->pending_reqs, i) && get_bit(bitfield, i))
+		if (state->piece_freq[i] && !get_bit(state->have, i) 
+      && !get_bit(state->pending_reqs, i) && get_bit(bitfield, i))
 		{
 			rarest = i;	
 			break;
@@ -24,7 +25,8 @@ int rarest_first(struct state *state, unsigned char *bitfield)
 
 	if (rarest != -1)
 		for (i = rarest+1; i < num_pieces; i++)
-			if (state->piece_freq[i] && (state->piece_freq[i] < state->piece_freq[rarest]) && !get_bit(state->have, i) && !get_bit(state->pending_reqs, i) && get_bit(bitfield, i))
+			if (state->piece_freq[i] && (state->piece_freq[i] < state->piece_freq[rarest])
+        && !get_bit(state->have, i) && !get_bit(state->pending_reqs, i) && get_bit(bitfield, i))
 				rarest = i;
 
  	return rarest;
@@ -78,9 +80,9 @@ void init_state(char *save_file, struct state *state)
   *state = (struct state) { .event = "started" };
   
   state->piece_freq 	 = calloc(num_pieces,sizeof (char));
-  state->have 	 	     = calloc(mask_size(num_pieces), sizeof (char));
-  state->pending_reqs  = calloc(mask_size(num_pieces), sizeof (char));
-  state->requests		   = calloc(mask_size(num_pieces), sizeof (char));
+  state->have 	 	     = calloc(NUM_BITS(num_pieces), sizeof (char));
+  state->pending_reqs  = calloc(NUM_BITS(num_pieces), sizeof (char));
+  state->requests		   = calloc(NUM_BITS(num_pieces), sizeof (char));
   
   state->num_choked	   = 0;
   state->num_connected = 0;
@@ -89,8 +91,8 @@ void init_state(char *save_file, struct state *state)
   {
     debug_print("reading saved state.");
     
-    iov[0].iov_base = state->have;        iov[0].iov_len = mask_size(num_pieces);
-    iov[1].iov_base = state->requests;    iov[1].iov_len = mask_size(num_pieces);
+    iov[0].iov_base = state->have;        iov[0].iov_len = NUM_BITS(num_pieces);
+    iov[1].iov_base = state->requests;    iov[1].iov_len = NUM_BITS(num_pieces);
     iov[2].iov_base = &state->requested;  iov[2].iov_len = sizeof (uint32_t);
     iov[3].iov_base = &state->uploaded;   iov[3].iov_len = sizeof (uint32_t);
     iov[4].iov_base = &state->downloaded; iov[4].iov_len = sizeof (uint32_t);
@@ -113,7 +115,7 @@ void init_state(char *save_file, struct state *state)
 
 void init_peer(struct peer *peer)
 {
-	peer->bitfield = calloc(mask_size(num_pieces), sizeof(char));
+	peer->bitfield = calloc(NUM_BITS(num_pieces), sizeof(char));
 	if (peer->bitfield == NULL)
 	{
 		errexit("ran out of memory allocating bitfield");
@@ -257,7 +259,7 @@ void handle_msgs(struct state *state, struct peer *peer, struct msg *msgs, int n
 				break;
 				
 			case BITFIELD:
-				memcpy(peer->bitfield, msg.bitfield, mask_size(num_pieces));
+				memcpy(peer->bitfield, msg.bitfield, NUM_BITS(num_pieces));
 				for (j = 0; j < num_pieces; j++)
 					state->piece_freq[j] += get_bit(peer->bitfield, j);
 				peer->flags |= RECVD_BITFIELD;;
@@ -342,7 +344,7 @@ int make_requests(struct msg_request *mreq, struct state *state, struct peer *pe
 	{
 		if (!blocks_queued)
 		{
-			index = rarest_first(state, peer->bitfield);
+			index = rarest_first(state, peer->bitfield, num_pieces);
 			if (index == -1)
 				break;
 			

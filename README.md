@@ -11,3 +11,4 @@ To do:
 - [x] save/resume
 - [ ] save blocks and assign to other peer if peer times out
 - [ ] scrape
+- [ ] support multiple torrents

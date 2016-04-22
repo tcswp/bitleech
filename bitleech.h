@@ -14,13 +14,11 @@
 #include <sys/stat.h> // check if dir exists
 #include <netdb.h>
 #include <openssl/sha.h>
-#include <pthread.h>
 #include <fcntl.h>			// O_NONBLOCK
 #include <poll.h>
-#include <stdbool.h>
-#include <assert.h>
 #include <getopt.h>
 #include <limits.h>
+#include <stdarg.h>
 
 #include "log.h"
 #include "metainfo.h"
